@@ -1,5 +1,5 @@
 name: Stash Battle
-description: Adds an ELO based ranking system for scenes.
+description: Adds an ELO based ranking system for scenes
 version: 1.0.0
 url: https://github.com/dtt-git/stash-battle
 ui:
