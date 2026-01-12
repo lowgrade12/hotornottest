@@ -14,9 +14,6 @@
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
-  
-  // Configuration constants
-  const MAX_SCENES_TO_CHECK = 50; // Limit scenes processed for random image selection
 
   // ============================================
   // GRAPHQL QUERIES
@@ -71,12 +68,6 @@
     ethnicity
     country
     gender
-    scene_count
-    scenes {
-      paths {
-        screenshot
-      }
-    }
   `;
 
 async function fetchSceneCount() {
@@ -420,7 +411,7 @@ async function fetchSceneCount() {
     if (battleType === "performers") {
       // Performer
       title = champion.name || `Performer #${champion.id}`;
-      imagePath = getRandomPerformerImage(champion);
+      imagePath = champion.image_path;
     } else {
       // Scene
       const file = champion.files && champion.files[0] ? champion.files[0] : {};
@@ -464,7 +455,7 @@ async function fetchSceneCount() {
     if (battleType === "performers") {
       // Performer
       title = item.name || `Performer #${item.id}`;
-      imagePath = getRandomPerformerImage(item);
+      imagePath = item.image_path;
     } else {
       // Scene
       const file = item.files && item.files[0] ? item.files[0] : {};
@@ -1118,35 +1109,12 @@ async function fetchPerformerCount(performerFilter = {}) {
     `;
   }
 
-  // Helper function to get a random scene screenshot for a performer
-  function getRandomPerformerImage(performer) {
-    // Check if performer has scenes with screenshots
-    if (performer.scenes && performer.scenes.length > 0) {
-      // Filter scenes that have a valid screenshot path (limit for performance)
-      const scenesToCheck = performer.scenes.slice(0, MAX_SCENES_TO_CHECK);
-      const scenesWithScreenshots = scenesToCheck.filter(scene => {
-        const screenshot = scene.paths?.screenshot;
-        return typeof screenshot === 'string' && screenshot.length > 0;
-      });
-      
-      if (scenesWithScreenshots.length > 0) {
-        // Pick a random scene screenshot
-        const randomIndex = Math.floor(Math.random() * scenesWithScreenshots.length);
-        const randomScene = scenesWithScreenshots[randomIndex];
-        return randomScene.paths.screenshot;
-      }
-    }
-    
-    // Fallback to performer's profile image
-    return performer.image_path || null;
-  }
-
   function createPerformerCard(performer, side, rank = null, streak = null) {
     // Performer name
     const name = performer.name || `Performer #${performer.id}`;
     
-    // Performer image - use random scene screenshot if available
-    const imagePath = getRandomPerformerImage(performer);
+    // Performer image - use their profile image
+    const imagePath = performer.image_path || null;
     
     // Performer metadata
     const birthdate = performer.birthdate || null;
