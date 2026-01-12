@@ -1363,11 +1363,11 @@ async function fetchPerformerCount(performerFilter = {}) {
 
       // Attach click-to-open (for thumbnail only)
       comparisonArea.querySelectorAll(".hon-scene-image-container").forEach((container) => {
-        const sceneUrl = container.dataset.sceneUrl;
+        const itemUrl = container.dataset.sceneUrl || container.dataset.performerUrl;
         
         container.addEventListener("click", () => {
-          if (sceneUrl) {
-            window.open(sceneUrl, "_blank");
+          if (itemUrl) {
+            window.open(itemUrl, "_blank");
           }
         });
       });
