@@ -271,6 +271,7 @@
   z-index: 1;
 }
 
+/* Only hide image on hover when video preview exists (requires modern browser with :has() support) */
 .hon-scene-card:has(.hon-hover-preview):hover .hon-hover-preview {
   opacity: 1;
 }
