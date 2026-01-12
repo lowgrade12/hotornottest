@@ -660,14 +660,18 @@ async function fetchPerformerCount(performerFilter = {}) {
       value: "MALE",
       modifier: "EXCLUDES"
     };
+    // Exclude performers without images by filtering out those where image is missing
+    filter.NOT = {
+      is_missing: "image"
+    };
     return filter;
   }
 
- async function fetchRandomPerformers(count = 2) {
+  async function fetchRandomPerformers(count = 2) {
   const performerFilter = getPerformerFilter();
   const totalPerformers = await fetchPerformerCount(performerFilter);
   if (totalPerformers < 2) {
-    throw new Error("Not enough performers for comparison. You need at least 2 non-male performers.");
+    throw new Error("Not enough performers for comparison. You need at least 2 non-male performers with images.");
   }
 
   const performerQuery = `
