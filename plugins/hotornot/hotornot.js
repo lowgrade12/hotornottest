@@ -14,6 +14,9 @@
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
+  
+  // Configuration constants
+  const MAX_SCENES_TO_CHECK = 50; // Limit scenes processed for random image selection
 
   // ============================================
   // GRAPHQL QUERIES
@@ -1119,11 +1122,11 @@ async function fetchPerformerCount(performerFilter = {}) {
   function getRandomPerformerImage(performer) {
     // Check if performer has scenes with screenshots
     if (performer.scenes && performer.scenes.length > 0) {
-      // Filter scenes that have a valid screenshot path (limit to first 50 for performance)
-      const scenesToCheck = performer.scenes.slice(0, 50);
+      // Filter scenes that have a valid screenshot path (limit for performance)
+      const scenesToCheck = performer.scenes.slice(0, MAX_SCENES_TO_CHECK);
       const scenesWithScreenshots = scenesToCheck.filter(scene => {
         const screenshot = scene.paths?.screenshot;
-        return screenshot && screenshot.trim() !== '';
+        return typeof screenshot === 'string' && screenshot.length > 0;
       });
       
       if (scenesWithScreenshots.length > 0) {
