@@ -10,7 +10,7 @@
   let gauntletChampionRank = 0; // Current rank position (1 = top)
   let gauntletDefeated = []; // IDs of performers defeated in current run
   let gauntletFalling = false; // True when champion lost and is finding their floor
-  let gauntletFallingScene = null; // The performer that's falling to find its position
+  let gauntletFallingPerformer = null; // The performer that's falling to find its position
   let totalPerformersCount = 0; // Total performers for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // This plugin is for performers only 
@@ -124,7 +124,7 @@
     const rating1 = performer1.rating100 || 50;
 
     // Find performers within ±15 rating points
-    const similarScenes = performers.filter(s => {
+    const similarPerformers = performers.filter(s => {
       if (s.id === performer1.id) return false;
       const rating = s.rating100 || 50;
       return Math.abs(rating - rating1) <= 15;
@@ -132,19 +132,19 @@
 
     let performer2;
     let performer2Index;
-    if (similarScenes.length > 0) {
+    if (similarPerformers.length > 0) {
       // Pick random from similar-rated performers
-      performer2 = similarScenes[Math.floor(Math.random() * similarScenes.length)];
+      performer2 = similarPerformers[Math.floor(Math.random() * similarPerformers.length)];
       performer2Index = performers.findIndex(s => s.id === performer2.id);
     } else {
       // No similar performers, pick closest
-      const otherScenes = performers.filter(s => s.id !== performer1.id);
-      otherScenes.sort((a, b) => {
+      const otherPerformers = performers.filter(s => s.id !== performer1.id);
+      otherPerformers.sort((a, b) => {
         const diffA = Math.abs((a.rating100 || 50) - rating1);
         const diffB = Math.abs((b.rating100 || 50) - rating1);
         return diffA - diffB;
       });
-      performer2 = otherScenes[0];
+      performer2 = otherPerformers[0];
       performer2Index = performers.findIndex(s => s.id === performer2.id);
     }
 
@@ -184,12 +184,12 @@
     }
 
     // Handle falling mode - find next opponent BELOW to test against
-    if (gauntletFalling && gauntletFallingScene) {
-      const fallingIndex = performers.findIndex(s => s.id === gauntletFallingScene.id);
+    if (gauntletFalling && gauntletFallingPerformer) {
+      const fallingIndex = performers.findIndex(s => s.id === gauntletFallingPerformer.id);
       
       // Find opponents below (higher index) that haven't been tested
       const belowOpponents = performers.filter((s, idx) => {
-        if (s.id === gauntletFallingScene.id) return false;
+        if (s.id === gauntletFallingPerformer.id) return false;
         if (gauntletDefeated.includes(s.id)) return false;
         return idx > fallingIndex; // Below in ranking
       });
@@ -198,10 +198,10 @@
         // Hit the bottom - they're the lowest, place them here
         const finalRank = performers.length;
         const finalRating = 1; // Lowest rating
-        updatePerformerRating(gauntletFallingScene.id, finalRating);
+        updatePerformerRating(gauntletFallingPerformer.id, finalRating);
         
         return {
-          performers: [gauntletFallingScene],
+          performers: [gauntletFallingPerformer],
           ranks: [finalRank],
           isVictory: false,
           isFalling: true,
@@ -218,7 +218,7 @@
         gauntletChampionRank = fallingIndex + 1;
         
         return {
-          performers: [gauntletFallingScene, nextBelow],
+          performers: [gauntletFallingPerformer, nextBelow],
           ranks: [fallingIndex + 1, nextBelowIndex + 1],
           isVictory: false,
           isFalling: true
@@ -231,7 +231,7 @@
       // Reset state
       gauntletDefeated = [];
       gauntletFalling = false;
-      gauntletFallingScene = null;
+      gauntletFallingPerformer = null;
       
       // Pick random performer as challenger
       const randomIndex = Math.floor(Math.random() * performers.length);
@@ -395,29 +395,20 @@
   }
 
   function createVictoryScreen(champion) {
-    const file = champion.files && champion.files[0] ? champion.files[0] : {};
-    let title = champion.title;
-    if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
-      title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
-    }
-    if (!title) {
-      title = `Performer #${champion.id}`;
-    }
-    
-    const screenshotPath = champion.paths ? champion.paths.screenshot : null;
+    const name = champion.name || `Performer #${champion.id}`;
+    const imagePath = champion.image_path || null;
     
     return `
       <div class="pwr-victory-screen">
         <div class="pwr-victory-crown">👑</div>
         <h2 class="pwr-victory-title">CHAMPION!</h2>
         <div class="pwr-victory-performer">
-          ${screenshotPath 
-            ? `<img class="pwr-victory-image" src="${screenshotPath}" alt="${title}" />`
-            : `<div class="pwr-victory-image pwr-no-image">No Screenshot</div>`
+          ${imagePath 
+            ? `<img class="pwr-victory-image" src="${imagePath}" alt="${name}" />`
+            : `<div class="pwr-victory-image pwr-no-image">No Image</div>`
           }
         </div>
-        <h3 class="pwr-victory-name">${title}</h3>
+        <h3 class="pwr-victory-name">${name}</h3>
         <p class="pwr-victory-stats">Conquered all ${totalPerformersCount} performers with a ${gauntletWins} win streak!</p>
         <button id="pwr-new-gauntlet" class="btn btn-primary">Start New Gauntlet</button>
       </div>
@@ -428,29 +419,20 @@
     const comparisonArea = document.getElementById("pwr-comparison-area");
     if (!comparisonArea) return;
     
-    const file = performer.files && performer.files[0] ? performer.files[0] : {};
-    let title = performer.title;
-    if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
-      title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
-    }
-    if (!title) {
-      title = `Performer #${performer.id}`;
-    }
-    
-    const screenshotPath = performer.paths ? performer.paths.screenshot : null;
+    const name = performer.name || `Performer #${performer.id}`;
+    const imagePath = performer.image_path || null;
     
     comparisonArea.innerHTML = `
       <div class="pwr-victory-screen">
         <div class="pwr-victory-crown">📍</div>
         <h2 class="pwr-victory-title">PLACED!</h2>
         <div class="pwr-victory-performer">
-          ${screenshotPath 
-            ? `<img class="pwr-victory-image" src="${screenshotPath}" alt="${title}" />`
-            : `<div class="pwr-victory-image pwr-no-image">No Screenshot</div>`
+          ${imagePath 
+            ? `<img class="pwr-victory-image" src="${imagePath}" alt="${name}" />`
+            : `<div class="pwr-victory-image pwr-no-image">No Image</div>`
           }
         </div>
-        <h3 class="pwr-victory-name">${title}</h3>
+        <h3 class="pwr-victory-name">${name}</h3>
         <p class="pwr-victory-stats">
           Rank <strong>#${rank}</strong> of ${totalPerformersCount}<br>
           Rating: <strong>${finalRating}/100</strong>
@@ -467,7 +449,7 @@
     
     // Reset state
     gauntletFalling = false;
-    gauntletFallingScene = null;
+    gauntletFallingPerformer = null;
     gauntletChampion = null;
     gauntletWins = 0;
     gauntletDefeated = [];
@@ -518,9 +500,9 @@
       // Defenders stay the same (they're just benchmarks)
       // EXCEPT: if the defender is rank #1, they lose 1 point when defeated
       const isChampionWinner = gauntletChampion && winnerId === gauntletChampion.id;
-      const isFallingWinner = gauntletFalling && gauntletFallingScene && winnerId === gauntletFallingScene.id;
+      const isFallingWinner = gauntletFalling && gauntletFallingPerformer && winnerId === gauntletFallingPerformer.id;
       const isChampionLoser = gauntletChampion && loserId === gauntletChampion.id;
-      const isFallingLoser = gauntletFalling && gauntletFallingScene && loserId === gauntletFallingScene.id;
+      const isFallingLoser = gauntletFalling && gauntletFallingPerformer && loserId === gauntletFallingPerformer.id;
       
       const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 40));
       const kFactor = 8;
@@ -582,27 +564,17 @@
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
-  function createSceneCard(performer, side, rank = null, streak = null) {
-    const file = performer.files && performer.files[0] ? performer.files[0] : {};
-    const duration = file.duration;
-    const performers = performer.performers && performer.performers.length > 0 
-      ? performer.performers.map((p) => p.name).join(", ") 
-      : "No performers";
-    const studio = performer.studio ? performer.studio.name : "No studio";
-    const tags = performer.tags ? performer.tags.slice(0, 5).map((t) => t.name) : [];
+  function createPerformerCard(performer, side, rank = null, streak = null) {
+    // Performer name
+    const name = performer.name || `Performer #${performer.id}`;
     
-    // Title fallback: title -> filename from path -> Scene ID
-    let title = performer.title;
-    if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
-      title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
-    }
-    if (!title) {
-      title = `Performer #${performer.id}`;
-    }
+    // Performer image
+    const imagePath = performer.image_path || null;
     
-    const screenshotPath = performer.paths ? performer.paths.screenshot : null;
-    const previewPath = performer.paths ? performer.paths.preview : null;
+    // Performer metadata
+    const birthdate = performer.birthdate || null;
+    const ethnicity = performer.ethnicity || null;
+    const country = performer.country || null;
     const stashRating = performer.rating100 ? `${performer.rating100}/100` : "Unrated";
     
     // Handle numeric ranks and string ranks
@@ -624,12 +596,10 @@
     return `
       <div class="pwr-performer-card pwr-scene-card" data-performer-id="${performer.id}" data-side="${side}" data-rating="${performer.rating100 || 50}">
         <div class="pwr-performer-image-container pwr-scene-image-container" data-performer-url="/performers/${performer.id}">
-          ${screenshotPath 
-            ? `<img class="pwr-performer-image pwr-scene-image" src="${screenshotPath}" alt="${title}" loading="lazy" />`
-            : `<div class="pwr-performer-image pwr-scene-image pwr-no-image">No Screenshot</div>`
+          ${imagePath 
+            ? `<img class="pwr-performer-image pwr-scene-image" src="${imagePath}" alt="${name}" loading="lazy" />`
+            : `<div class="pwr-performer-image pwr-scene-image pwr-no-image">No Image</div>`
           }
-          ${previewPath ? `<video class="pwr-hover-preview" src="${previewPath}" loop playsinline></video>` : ''}
-          <div class="pwr-performer-duration pwr-scene-duration">${formatDuration(duration)}</div>
           ${streakDisplay}
           <div class="pwr-click-hint">Click to open performer</div>
         </div>
@@ -637,16 +607,15 @@
         <div class="pwr-performer-body pwr-scene-body" data-winner="${performer.id}">
           <div class="pwr-performer-info pwr-scene-info">
             <div class="pwr-performer-title-row pwr-scene-title-row">
-              <h3 class="pwr-performer-title pwr-scene-title">${title}</h3>
+              <h3 class="pwr-performer-title pwr-scene-title">${name}</h3>
               ${rankDisplay}
             </div>
             
             <div class="pwr-performer-meta pwr-scene-meta">
-              <div class="pwr-meta-item"><strong>Studio:</strong> ${studio}</div>
-              <div class="pwr-meta-item"><strong>Performers:</strong> ${performers}</div>
-              <div class="pwr-meta-item"><strong>Date:</strong> ${performer.date || '<span class="pwr-none">None</span>'}</div>
+              ${birthdate ? `<div class="pwr-meta-item"><strong>Birthdate:</strong> ${birthdate}</div>` : ''}
+              ${ethnicity ? `<div class="pwr-meta-item"><strong>Ethnicity:</strong> ${ethnicity}</div>` : ''}
+              ${country ? `<div class="pwr-meta-item"><strong>Country:</strong> ${country}</div>` : ''}
               <div class="pwr-meta-item"><strong>Rating:</strong> ${stashRating}</div>
-              <div class="pwr-meta-item pwr-tags-row"><strong>Tags:</strong> ${tags.length > 0 ? tags.map((tag) => `<span class="pwr-tag">${tag}</span>`).join("") : '<span class="pwr-none">None</span>'}
             </div>
           </div>
           
@@ -741,7 +710,7 @@
               gauntletChampionRank = 0;
               gauntletDefeated = [];
               gauntletFalling = false;
-              gauntletFallingScene = null;
+              gauntletFallingPerformer = null;
               // Show the actions again
               if (actionsEl) actionsEl.style.display = "";
               loadNewPair();
@@ -818,17 +787,17 @@
 
       comparisonArea.innerHTML = `
         <div class="pwr-vs-container">
-          ${createSceneCard(performers[0], "left", ranks[0], leftStreak)}
+          ${createPerformerCard(performers[0], "left", ranks[0], leftStreak)}
           <div class="pwr-vs-divider">
             <span class="pwr-vs-text">VS</span>
           </div>
-          ${createSceneCard(performers[1], "right", ranks[1], rightStreak)}
+          ${createPerformerCard(performers[1], "right", ranks[1], rightStreak)}
         </div>
       `;
 
       // Attach event listeners to performer body (for choosing)
       comparisonArea.querySelectorAll(".pwr-performer-body").forEach((body) => {
-        body.addEventListener("click", handleChooseScene);
+        body.addEventListener("click", handleChoosePerformer);
       });
 
       // Attach click-to-open (for thumbnail only)
@@ -879,7 +848,7 @@
     }
   }
 
-  function handleChooseScene(event) {
+  function handleChoosePerformer(event) {
     if(disableChoice) return;
     disableChoice = true;
     const body = event.currentTarget;
@@ -896,16 +865,16 @@
 
     // Handle gauntlet mode (champion tracking)
     if (currentMode === "gauntlet") {
-      const winnerScene = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
-      const loserScene = loserId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const winnerPerformer = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const loserPerformer = loserId === currentPair.left.id ? currentPair.left : currentPair.right;
       
       // Check if we're in falling mode (finding floor after a loss)
-      if (gauntletFalling && gauntletFallingScene) {
-        if (winnerId === gauntletFallingScene.id) {
+      if (gauntletFalling && gauntletFallingPerformer) {
+        if (winnerId === gauntletFallingPerformer.id) {
           // Falling performer won - found their floor!
           // Set their rating to just above the performer they beat
           const finalRating = Math.min(100, loserRating + 1);
-          updatePerformerRating(gauntletFallingScene.id, finalRating);
+          updatePerformerRating(gauntletFallingPerformer.id, finalRating);
           
           // Final rank is one above the opponent (we beat them, so we're above them)
           const opponentRank = loserId === currentPair.left.id ? currentRanks.left : currentRanks.right;
@@ -917,7 +886,7 @@
           
           // Show placement screen after brief delay
           setTimeout(() => {
-            showPlacementScreen(gauntletFallingScene, finalRank, finalRating);
+            showPlacementScreen(gauntletFallingPerformer, finalRank, finalRating);
           }, 800);
           return;
         } else {
@@ -946,16 +915,16 @@
       } else if (gauntletChampion && winnerId !== gauntletChampion.id) {
         // Champion LOST - start falling to find their floor
         gauntletFalling = true;
-        gauntletFallingScene = loserScene; // The old champion is now falling
+        gauntletFallingPerformer = loserPerformer; // The old champion is now falling
         gauntletDefeated = [winnerId]; // They lost to this performer
         
         // Winner becomes the new climbing champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerPerformer;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletWins = 1;
       } else {
         // No champion yet - winner becomes champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerPerformer;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletDefeated = [loserId];
         gauntletWins = 1;
@@ -979,7 +948,7 @@
 
     // Handle champion mode (like gauntlet but winner always takes over)
     if (currentMode === "champion") {
-      const winnerScene = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const winnerPerformer = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
       
       // Calculate rating changes (pass loserRank for #1 dethrone)
       const { newWinnerRating, newLoserRating, winnerChange, loserChange } = handleComparison(winnerId, loserId, winnerRating, loserRating, loserRank);
@@ -991,7 +960,7 @@
         gauntletChampion.rating100 = newWinnerRating;
       } else {
         // Champion lost or first pick - winner becomes new champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerPerformer;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletDefeated = [loserId];
         gauntletWins = 1;
@@ -1142,7 +1111,7 @@
           gauntletWins = 0;
           gauntletDefeated = [];
           gauntletFalling = false;
-          gauntletFallingScene = null;
+          gauntletFallingPerformer = null;
           
           // Update button states
           modal.querySelectorAll(".pwr-mode-btn").forEach((b) => {
@@ -1175,7 +1144,7 @@
           gauntletWins = 0;
           gauntletDefeated = [];
           gauntletFalling = false;
-          gauntletFallingScene = null;
+          gauntletFallingPerformer = null;
         }
         loadNewPair();
       });
@@ -1227,7 +1196,7 @@
             gauntletWins = 0;
             gauntletDefeated = [];
             gauntletFalling = false;
-            gauntletFallingScene = null;
+            gauntletFallingPerformer = null;
           }
           loadNewPair();
         }
