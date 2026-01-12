@@ -1113,7 +1113,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Performer name
     const name = performer.name || `Performer #${performer.id}`;
     
-    // Performer image
+    // Performer image - use their profile image
     const imagePath = performer.image_path || null;
     
     // Performer metadata
