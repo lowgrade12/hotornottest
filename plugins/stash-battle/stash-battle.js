@@ -405,59 +405,79 @@ async function fetchSceneCount() {
   }
   
   function createVictoryScreen(champion) {
-    const file = champion.files && champion.files[0] ? champion.files[0] : {};
-    let title = champion.title;
-    if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
-      title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
-    }
-    if (!title) {
-      title = `Scene #${champion.id}`;
+    // Handle both scenes and performers
+    let title, imagePath;
+    
+    if (battleType === "performers") {
+      // Performer
+      title = champion.name || `Performer #${champion.id}`;
+      imagePath = champion.image_path;
+    } else {
+      // Scene
+      const file = champion.files && champion.files[0] ? champion.files[0] : {};
+      title = champion.title;
+      if (!title && file.path) {
+        const pathParts = file.path.split(/[/\\]/);
+        title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
+      }
+      if (!title) {
+        title = `Scene #${champion.id}`;
+      }
+      imagePath = champion.paths ? champion.paths.screenshot : null;
     }
     
-    const screenshotPath = champion.paths ? champion.paths.screenshot : null;
+    const itemType = battleType === "performers" ? "performers" : "scenes";
     
     return `
       <div class="pwr-victory-screen">
         <div class="pwr-victory-crown">👑</div>
         <h2 class="pwr-victory-title">CHAMPION!</h2>
         <div class="pwr-victory-scene">
-          ${screenshotPath 
-            ? `<img class="pwr-victory-image" src="${screenshotPath}" alt="${title}" />`
-            : `<div class="pwr-victory-image pwr-no-image">No Screenshot</div>`
+          ${imagePath 
+            ? `<img class="pwr-victory-image" src="${imagePath}" alt="${title}" />`
+            : `<div class="pwr-victory-image pwr-no-image">No Image</div>`
           }
         </div>
         <h3 class="pwr-victory-name">${title}</h3>
-        <p class="pwr-victory-stats">Conquered all ${totalItemsCount} scenes with a ${gauntletWins} win streak!</p>
+        <p class="pwr-victory-stats">Conquered all ${totalItemsCount} ${itemType} with a ${gauntletWins} win streak!</p>
         <button id="pwr-new-gauntlet" class="btn btn-primary">Start New Gauntlet</button>
       </div>
     `;
   }
 
-  function showPlacementScreen(scene, rank, finalRating) {
+  function showPlacementScreen(item, rank, finalRating) {
     const comparisonArea = document.getElementById("pwr-comparison-area");
     if (!comparisonArea) return;
     
-    const file = scene.files && scene.files[0] ? scene.files[0] : {};
-    let title = scene.title;
-    if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
-      title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
-    }
-    if (!title) {
-      title = `Scene #${scene.id}`;
-    }
+    // Handle both scenes and performers
+    let title, imagePath;
     
-    const screenshotPath = scene.paths ? scene.paths.screenshot : null;
+    if (battleType === "performers") {
+      // Performer
+      title = item.name || `Performer #${item.id}`;
+      imagePath = item.image_path;
+    } else {
+      // Scene
+      const file = item.files && item.files[0] ? item.files[0] : {};
+      title = item.title;
+      if (!title && file.path) {
+        const pathParts = file.path.split(/[/\\]/);
+        title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
+      }
+      if (!title) {
+        title = `Scene #${item.id}`;
+      }
+      imagePath = item.paths ? item.paths.screenshot : null;
+    }
     
     comparisonArea.innerHTML = `
       <div class="pwr-victory-screen">
         <div class="pwr-victory-crown">📍</div>
         <h2 class="pwr-victory-title">PLACED!</h2>
         <div class="pwr-victory-scene">
-          ${screenshotPath 
-            ? `<img class="pwr-victory-image" src="${screenshotPath}" alt="${title}" />`
-            : `<div class="pwr-victory-image pwr-no-image">No Screenshot</div>`
+          ${imagePath 
+            ? `<img class="pwr-victory-image" src="${imagePath}" alt="${title}" />`
+            : `<div class="pwr-victory-image pwr-no-image">No Image</div>`
           }
         </div>
         <h3 class="pwr-victory-name">${title}</h3>
@@ -1034,7 +1054,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Title fallback: title -> filename from path -> Scene ID
     let title = scene.title;
     if (!title && file.path) {
-      const pathParts = file.path.split(/[/\\]/);
+      const pathParts = file.path.split(/[/\\\\]/);
       title = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, "");
     }
     if (!title) {
@@ -1335,7 +1355,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
       // Attach event listeners to scene body (for choosing)
       comparisonArea.querySelectorAll(".pwr-scene-body").forEach((body) => {
-        body.addEventListener("click", handleChooseScene);
+        body.addEventListener("click", handleChooseItem);
       });
 
       // Attach click-to-open (for thumbnail only)
@@ -1386,7 +1406,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     }
   }
 
-  function handleChooseScene(event) {
+  function handleChooseItem(event) {
     if(disableChoice) return;
     disableChoice = true;
     const body = event.currentTarget;
@@ -1395,7 +1415,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     const loserId = winnerId === currentPair.left.id ? currentPair.right.id : currentPair.left.id;
     
     const winnerRating = parseInt(winnerCard.dataset.rating) || 50;
-    const loserCard = document.querySelector(`.pwr-scene-card[data-scene-id="${loserId}"]`);
+    const loserCard = document.querySelector(`.pwr-scene-card[data-scene-id="${loserId}"], .pwr-scene-card[data-performer-id="${loserId}"]`);
     const loserRating = parseInt(loserCard?.dataset.rating) || 50;
     
     // Get the loser's rank for #1 dethrone logic
@@ -1403,8 +1423,8 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     // Handle gauntlet mode (champion tracking)
     if (currentMode === "gauntlet") {
-      const winnerScene = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
-      const loserScene = loserId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const winnerItem = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const loserItem = loserId === currentPair.left.id ? currentPair.left : currentPair.right;
       
       // Check if we're in falling mode (finding floor after a loss)
       if (gauntletFalling && gauntletFallingItem) {
@@ -1412,7 +1432,7 @@ async function fetchPerformerCount(performerFilter = {}) {
           // Falling scene won - found their floor!
           // Set their rating to just above the scene they beat
           const finalRating = Math.min(100, loserRating + 1);
-          updateSceneRating(gauntletFallingItem.id, finalRating);
+          updateItemRating(gauntletFallingItem.id, finalRating);
           
           // Final rank is one above the opponent (we beat them, so we're above them)
           const opponentRank = loserId === currentPair.left.id ? currentRanks.left : currentRanks.right;
@@ -1453,16 +1473,16 @@ async function fetchPerformerCount(performerFilter = {}) {
       } else if (gauntletChampion && winnerId !== gauntletChampion.id) {
         // Champion LOST - start falling to find their floor
         gauntletFalling = true;
-        gauntletFallingItem = loserScene; // The old champion is now falling
+        gauntletFallingItem = loserItem; // The old champion is now falling
         gauntletDefeated = [winnerId]; // They lost to this scene
         
         // Winner becomes the new climbing champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletWins = 1;
       } else {
         // No champion yet - winner becomes champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletDefeated = [loserId];
         gauntletWins = 1;
@@ -1486,7 +1506,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     // Handle champion mode (like gauntlet but winner always takes over)
     if (currentMode === "champion") {
-      const winnerScene = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
+      const winnerItem = winnerId === currentPair.left.id ? currentPair.left : currentPair.right;
       
       // Calculate rating changes (pass loserRank for #1 dethrone)
       const { newWinnerRating, newLoserRating, winnerChange, loserChange } = handleComparison(winnerId, loserId, winnerRating, loserRating, loserRank);
@@ -1498,7 +1518,7 @@ async function fetchPerformerCount(performerFilter = {}) {
         gauntletChampion.rating100 = newWinnerRating;
       } else {
         // Champion lost or first pick - winner becomes new champion
-        gauntletChampion = winnerScene;
+        gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletDefeated = [loserId];
         gauntletWins = 1;
