@@ -15,6 +15,20 @@
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
 
+  // Performer filter settings
+  let performerFilters = {
+    genders: [], // Array of gender values to INCLUDE (empty = all)
+    excludeMale: true, // Legacy: exclude male by default
+    ethnicity: null, // String filter for ethnicity
+    country: null, // String filter for country
+    minAge: null, // Minimum age
+    maxAge: null, // Maximum age
+    minRating: null, // Minimum rating (1-100)
+    maxRating: null, // Maximum rating (1-100)
+    nameSearch: null, // Search by performer name
+    requireImage: true // Require performer to have an image
+  };
+
   // ============================================
   // GRAPHQL QUERIES
   // ============================================
@@ -672,15 +686,98 @@ async function fetchPerformerCount(performerFilter = {}) {
 
   function getPerformerFilter() {
     const filter = {};
-    // Exclude male performers
-    filter.gender = {
-      value: "MALE",
-      modifier: "EXCLUDES"
-    };
-    // Exclude performers without images by filtering out those where image is missing
-    filter.NOT = {
-      is_missing: "image"
-    };
+    
+    // Gender filter
+    if (performerFilters.excludeMale && performerFilters.genders.length === 0) {
+      // Legacy behavior: exclude male performers
+      filter.gender = {
+        value: "MALE",
+        modifier: "EXCLUDES"
+      };
+    } else if (performerFilters.genders.length > 0) {
+      // Include only selected genders
+      filter.gender = {
+        value: performerFilters.genders,
+        modifier: "INCLUDES"
+      };
+    }
+    
+    // Ethnicity filter
+    if (performerFilters.ethnicity) {
+      filter.ethnicity = {
+        value: performerFilters.ethnicity,
+        modifier: "INCLUDES"
+      };
+    }
+    
+    // Country filter
+    if (performerFilters.country) {
+      filter.country = {
+        value: performerFilters.country,
+        modifier: "INCLUDES"
+      };
+    }
+    
+    // Age filter (based on birthdate)
+    if (performerFilters.minAge !== null || performerFilters.maxAge !== null) {
+      const today = new Date();
+      const birthDateFilter = {};
+      
+      if (performerFilters.maxAge !== null) {
+        // Min birthdate = today - maxAge years
+        const minBirthdate = new Date(today.getFullYear() - performerFilters.maxAge, today.getMonth(), today.getDate());
+        birthDateFilter.value = minBirthdate.toISOString().split('T')[0];
+        birthDateFilter.modifier = "GREATER_THAN";
+      }
+      
+      if (performerFilters.minAge !== null) {
+        // Max birthdate = today - minAge years
+        const maxBirthdate = new Date(today.getFullYear() - performerFilters.minAge, today.getMonth(), today.getDate());
+        birthDateFilter.value2 = maxBirthdate.toISOString().split('T')[0];
+        birthDateFilter.modifier = "BETWEEN";
+      }
+      
+      if (Object.keys(birthDateFilter).length > 0) {
+        filter.birth_date = birthDateFilter;
+      }
+    }
+    
+    // Rating filter
+    if (performerFilters.minRating !== null || performerFilters.maxRating !== null) {
+      const ratingFilter = {};
+      
+      if (performerFilters.minRating !== null && performerFilters.maxRating !== null) {
+        ratingFilter.value = performerFilters.minRating;
+        ratingFilter.value2 = performerFilters.maxRating;
+        ratingFilter.modifier = "BETWEEN";
+      } else if (performerFilters.minRating !== null) {
+        ratingFilter.value = performerFilters.minRating;
+        ratingFilter.modifier = "GREATER_THAN";
+      } else if (performerFilters.maxRating !== null) {
+        ratingFilter.value = performerFilters.maxRating;
+        ratingFilter.modifier = "LESS_THAN";
+      }
+      
+      if (Object.keys(ratingFilter).length > 0) {
+        filter.rating100 = ratingFilter;
+      }
+    }
+    
+    // Name search filter
+    if (performerFilters.nameSearch) {
+      filter.name = {
+        value: performerFilters.nameSearch,
+        modifier: "INCLUDES"
+      };
+    }
+    
+    // Require image filter
+    if (performerFilters.requireImage) {
+      filter.NOT = {
+        is_missing: "image"
+      };
+    }
+    
     return filter;
   }
 
@@ -1604,15 +1701,177 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
 
+  function createFilterPanel() {
+    return `
+      <div class="hon-filter-panel">
+        <div class="hon-filter-header">
+          <h3 class="hon-filter-title">⚙️ Filter Performers</h3>
+          <button id="hon-filter-toggle" class="hon-filter-toggle-btn">
+            <span class="hon-filter-toggle-icon">▼</span>
+          </button>
+        </div>
+        
+        <div id="hon-filter-content" class="hon-filter-content" style="display: none;">
+          <!-- Gender Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label">Gender</label>
+            <div class="hon-filter-checkboxes">
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="FEMALE" checked>
+                Female
+              </label>
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="TRANSGENDER_FEMALE">
+                Trans Female
+              </label>
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="NON_BINARY">
+                Non-Binary
+              </label>
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="MALE">
+                Male
+              </label>
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="TRANSGENDER_MALE">
+                Trans Male
+              </label>
+              <label class="hon-checkbox-label">
+                <input type="checkbox" class="hon-gender-filter" value="INTERSEX">
+                Intersex
+              </label>
+            </div>
+          </div>
+          
+          <!-- Ethnicity Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label" for="hon-ethnicity-filter">Ethnicity</label>
+            <input 
+              type="text" 
+              id="hon-ethnicity-filter" 
+              class="hon-filter-input" 
+              placeholder="e.g., Asian, Caucasian, Latina..."
+            >
+            <small class="hon-filter-hint">Leave empty for all ethnicities</small>
+          </div>
+          
+          <!-- Country Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label" for="hon-country-filter">Country</label>
+            <input 
+              type="text" 
+              id="hon-country-filter" 
+              class="hon-filter-input" 
+              placeholder="e.g., USA, Japan, Brazil..."
+            >
+            <small class="hon-filter-hint">Leave empty for all countries</small>
+          </div>
+          
+          <!-- Age Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label">Age Range</label>
+            <div class="hon-filter-range">
+              <div class="hon-filter-range-item">
+                <label for="hon-min-age">Min</label>
+                <input 
+                  type="number" 
+                  id="hon-min-age" 
+                  class="hon-filter-input-small" 
+                  placeholder="18" 
+                  min="18" 
+                  max="100"
+                >
+              </div>
+              <span class="hon-filter-range-separator">to</span>
+              <div class="hon-filter-range-item">
+                <label for="hon-max-age">Max</label>
+                <input 
+                  type="number" 
+                  id="hon-max-age" 
+                  class="hon-filter-input-small" 
+                  placeholder="100" 
+                  min="18" 
+                  max="100"
+                >
+              </div>
+            </div>
+          </div>
+          
+          <!-- Rating Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label">Rating Range</label>
+            <div class="hon-filter-range">
+              <div class="hon-filter-range-item">
+                <label for="hon-min-rating">Min</label>
+                <input 
+                  type="number" 
+                  id="hon-min-rating" 
+                  class="hon-filter-input-small" 
+                  placeholder="1" 
+                  min="1" 
+                  max="100"
+                >
+              </div>
+              <span class="hon-filter-range-separator">to</span>
+              <div class="hon-filter-range-item">
+                <label for="hon-max-rating">Max</label>
+                <input 
+                  type="number" 
+                  id="hon-max-rating" 
+                  class="hon-filter-input-small" 
+                  placeholder="100" 
+                  min="1" 
+                  max="100"
+                >
+              </div>
+            </div>
+          </div>
+          
+          <!-- Name Search Filter -->
+          <div class="hon-filter-group">
+            <label class="hon-filter-label" for="hon-name-filter">Name Search</label>
+            <input 
+              type="text" 
+              id="hon-name-filter" 
+              class="hon-filter-input" 
+              placeholder="Search by performer name..."
+            >
+          </div>
+          
+          <!-- Image Requirement Toggle -->
+          <div class="hon-filter-group">
+            <label class="hon-checkbox-label">
+              <input type="checkbox" id="hon-require-image" checked>
+              Only show performers with images
+            </label>
+          </div>
+          
+          <!-- Filter Actions -->
+          <div class="hon-filter-actions">
+            <button id="hon-apply-filters" class="btn btn-primary">Apply Filters</button>
+            <button id="hon-reset-filters" class="btn btn-secondary">Reset</button>
+          </div>
+          
+          <div id="hon-filter-status" class="hon-filter-status"></div>
+        </div>
+      </div>
+    `;
+  }
+
   function createMainUI() {
     const itemType = battleType === "performers" ? "performers" : (battleType === "images" ? "images" : "scenes");
     const itemTypeSingular = battleType === "performers" ? "performer" : (battleType === "images" ? "image" : "scene");
+    
+    // Only show filter panel for performers
+    const filterPanelHTML = battleType === "performers" ? createFilterPanel() : '';
     
     return `
       <div id="hotornot-container" class="hon-container">
         <div class="hon-header">
           <h1 class="hon-title">🔥 HotOrNot</h1>
           <p class="hon-subtitle">Compare ${itemType} head-to-head to build your rankings</p>
+          
+          ${filterPanelHTML}
           
           <div class="hon-mode-toggle">
             <button class="hon-mode-btn ${currentMode === 'swiss' ? 'active' : ''}" data-mode="swiss">
@@ -2088,6 +2347,11 @@ function addFloatingButton() {
 
     document.body.appendChild(modal);
 
+    // Filter panel event handlers (only for performers)
+    if (battleType === "performers") {
+      setupFilterHandlers(modal);
+    }
+
     // Mode toggle buttons
     modal.querySelectorAll(".hon-mode-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2191,6 +2455,154 @@ function addFloatingButton() {
         }
       }
     });
+  }
+
+  function setupFilterHandlers(modal) {
+    // Toggle filter panel
+    const toggleBtn = modal.querySelector("#hon-filter-toggle");
+    const filterContent = modal.querySelector("#hon-filter-content");
+    const toggleIcon = modal.querySelector(".hon-filter-toggle-icon");
+    
+    if (toggleBtn && filterContent) {
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = filterContent.style.display === "none";
+        filterContent.style.display = isHidden ? "block" : "none";
+        toggleIcon.textContent = isHidden ? "▲" : "▼";
+      });
+    }
+    
+    // Apply filters button
+    const applyBtn = modal.querySelector("#hon-apply-filters");
+    if (applyBtn) {
+      applyBtn.addEventListener("click", applyFilters);
+    }
+    
+    // Reset filters button
+    const resetBtn = modal.querySelector("#hon-reset-filters");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", resetFilters);
+    }
+  }
+
+  function applyFilters() {
+    // Collect gender selections
+    const genderCheckboxes = document.querySelectorAll(".hon-gender-filter:checked");
+    performerFilters.genders = Array.from(genderCheckboxes).map(cb => cb.value);
+    performerFilters.excludeMale = performerFilters.genders.length === 0; // Legacy behavior
+    
+    // Collect text filters
+    const ethnicityInput = document.querySelector("#hon-ethnicity-filter");
+    performerFilters.ethnicity = ethnicityInput?.value.trim() || null;
+    
+    const countryInput = document.querySelector("#hon-country-filter");
+    performerFilters.country = countryInput?.value.trim() || null;
+    
+    // Collect age range
+    const minAgeInput = document.querySelector("#hon-min-age");
+    const maxAgeInput = document.querySelector("#hon-max-age");
+    performerFilters.minAge = minAgeInput?.value ? parseInt(minAgeInput.value) : null;
+    performerFilters.maxAge = maxAgeInput?.value ? parseInt(maxAgeInput.value) : null;
+    
+    // Collect rating range
+    const minRatingInput = document.querySelector("#hon-min-rating");
+    const maxRatingInput = document.querySelector("#hon-max-rating");
+    performerFilters.minRating = minRatingInput?.value ? parseInt(minRatingInput.value) : null;
+    performerFilters.maxRating = maxRatingInput?.value ? parseInt(maxRatingInput.value) : null;
+    
+    // Collect name search
+    const nameInput = document.querySelector("#hon-name-filter");
+    performerFilters.nameSearch = nameInput?.value.trim() || null;
+    
+    // Collect image requirement
+    const requireImageCheckbox = document.querySelector("#hon-require-image");
+    performerFilters.requireImage = requireImageCheckbox?.checked ?? true;
+    
+    // Reset gauntlet/champion state when filters change
+    gauntletChampion = null;
+    gauntletWins = 0;
+    gauntletDefeated = [];
+    gauntletFalling = false;
+    gauntletFallingItem = null;
+    
+    // Show status
+    const statusEl = document.querySelector("#hon-filter-status");
+    if (statusEl) {
+      statusEl.textContent = "Filters applied! Loading new comparison...";
+      statusEl.className = "hon-filter-status hon-filter-status-success";
+      setTimeout(() => {
+        statusEl.textContent = "";
+        statusEl.className = "hon-filter-status";
+      }, 3000);
+    }
+    
+    // Reload comparison with new filters
+    loadNewPair();
+  }
+
+  function resetFilters() {
+    // Reset to defaults
+    performerFilters = {
+      genders: [],
+      excludeMale: true,
+      ethnicity: null,
+      country: null,
+      minAge: null,
+      maxAge: null,
+      minRating: null,
+      maxRating: null,
+      nameSearch: null,
+      requireImage: true
+    };
+    
+    // Reset UI
+    document.querySelectorAll(".hon-gender-filter").forEach(cb => {
+      cb.checked = cb.value === "FEMALE"; // Only Female checked by default
+    });
+    
+    const ethnicityInput = document.querySelector("#hon-ethnicity-filter");
+    if (ethnicityInput) ethnicityInput.value = "";
+    
+    const countryInput = document.querySelector("#hon-country-filter");
+    if (countryInput) countryInput.value = "";
+    
+    const minAgeInput = document.querySelector("#hon-min-age");
+    if (minAgeInput) minAgeInput.value = "";
+    
+    const maxAgeInput = document.querySelector("#hon-max-age");
+    if (maxAgeInput) maxAgeInput.value = "";
+    
+    const minRatingInput = document.querySelector("#hon-min-rating");
+    if (minRatingInput) minRatingInput.value = "";
+    
+    const maxRatingInput = document.querySelector("#hon-max-rating");
+    if (maxRatingInput) maxRatingInput.value = "";
+    
+    const nameInput = document.querySelector("#hon-name-filter");
+    if (nameInput) nameInput.value = "";
+    
+    const requireImageCheckbox = document.querySelector("#hon-require-image");
+    if (requireImageCheckbox) requireImageCheckbox.checked = true;
+    
+    // Reset gauntlet/champion state
+    gauntletChampion = null;
+    gauntletWins = 0;
+    gauntletDefeated = [];
+    gauntletFalling = false;
+    gauntletFallingItem = null;
+    
+    // Show status
+    const statusEl = document.querySelector("#hon-filter-status");
+    if (statusEl) {
+      statusEl.textContent = "Filters reset to defaults!";
+      statusEl.className = "hon-filter-status hon-filter-status-success";
+      setTimeout(() => {
+        statusEl.textContent = "";
+        statusEl.className = "hon-filter-status";
+      }, 3000);
+    }
+    
+    // Reload comparison
+    loadNewPair();
   }
 
   function closeRankingModal() {
