@@ -2207,7 +2207,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       imageList.querySelectorAll('.hon-selection-card').forEach((card) => {
         card.addEventListener('click', () => {
           const imageId = card.dataset.imageId;
-          const selectedImage = images.find(i => i.id === imageId);
+          const selectedImage = images.find(i => i.id.toString() === imageId);
           if (selectedImage) {
             startGauntletWithImage(selectedImage);
           }
