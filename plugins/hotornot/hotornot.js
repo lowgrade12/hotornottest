@@ -556,7 +556,7 @@ async function fetchSceneCount() {
     }
   }
 
-  async function updatePerformerRating(performerId, newRating, performerObj = null) {
+  async function updatePerformerRating(performerId, newRating, performerObj = null, won = null) {
     const mutation = `
       mutation UpdatePerformerCustomFields($id: ID!, $rating: Int!, $fields: Map) {
         performerUpdate(input: {
@@ -578,25 +578,17 @@ async function fetchSceneCount() {
       rating: Math.round(newRating)
     };
     
-    // Update stats if performer object provided
-    if (performerObj && battleType === "performers") {
+    // Update stats if performer object and win/loss result provided
+    if (performerObj && battleType === "performers" && won !== null) {
       const currentStats = parsePerformerEloData(performerObj);
       
-      // Determine if this was a win or loss based on rating change
-      // This is a simplification - the actual win/loss will be set by handleComparison
-      // For now, we'll use a temporary field that will be set externally
-      const won = performerObj._tempWon || false;
-      
-      // Update stats
+      // Update stats based on match outcome
       const newStats = updatePerformerStats(currentStats, won);
       
-      // Use partial update to save stats as JSON string
+      // Save stats as JSON string in custom field
       variables.fields = {
         elo_stats: JSON.stringify(newStats)
       };
-      
-      // Clean up temporary field
-      delete performerObj._tempWon;
     }
     
     return await graphqlQuery(mutation, variables);
@@ -746,6 +738,39 @@ async function fetchSceneCount() {
     }
   }
 
+  /**
+   * Check if a performer is an active participant in gauntlet/champion mode
+   * Active participants are those whose stats should be tracked
+   * @param {string} performerId - ID of the performer to check
+   * @param {number|null} performerRank - Rank of the performer (null if not ranked)
+   * @returns {boolean} True if performer's stats should be tracked
+   */
+  function isActiveParticipant(performerId, performerRank) {
+    // In Swiss mode, all participants are active
+    if (currentMode !== "gauntlet" && currentMode !== "champion") {
+      return true;
+    }
+    
+    // Check if this is the champion
+    const isChampion = gauntletChampion && performerId === gauntletChampion.id;
+    
+    // Check if this is the falling performer
+    const isFalling = gauntletFalling && gauntletFallingItem && performerId === gauntletFallingItem.id;
+    
+    // Champion or falling performer are always active
+    if (isChampion || isFalling) {
+      return true;
+    }
+    
+    // Defender at rank #1 who is being challenged is also active (they can lose rating)
+    if (performerRank === 1) {
+      return true;
+    }
+    
+    // All other defenders are not active (they're just benchmarks)
+    return false;
+  }
+
   function handleComparison(winnerId, loserId, winnerCurrentRating, loserCurrentRating, loserRank = null, winnerObj = null, loserObj = null) {
     const winnerRating = winnerCurrentRating || 50;
     const loserRating = loserCurrentRating || 50;
@@ -809,41 +834,19 @@ async function fetchSceneCount() {
     const winnerChange = newWinnerRating - winnerRating;
     const loserChange = newLoserRating - loserRating;
     
-    // Set temporary win/loss flags for stats tracking
-    // In gauntlet/champion modes, only track stats for the active champion/falling performer
-    if (battleType === "performers") {
-      if (currentMode === "gauntlet" || currentMode === "champion") {
-        const isChampionWinner = gauntletChampion && winnerId === gauntletChampion.id;
-        const isFallingWinner = gauntletFalling && gauntletFallingItem && winnerId === gauntletFallingItem.id;
-        const isChampionLoser = gauntletChampion && loserId === gauntletChampion.id;
-        const isFallingLoser = gauntletFalling && gauntletFallingItem && loserId === gauntletFallingItem.id;
-        
-        // Only set flags for active participants (champion or falling)
-        if (winnerObj && (isChampionWinner || isFallingWinner)) {
-          winnerObj._tempWon = true;
-        }
-        if (loserObj && (isChampionLoser || isFallingLoser)) {
-          loserObj._tempWon = false;
-        }
-        
-        // For defender at rank #1 who lost, also track their loss
-        if (loserRank === 1 && !isChampionLoser && !isFallingLoser && loserObj) {
-          loserObj._tempWon = false;
-        }
-      } else {
-        // Swiss mode: track stats for both participants
-        if (winnerObj) {
-          winnerObj._tempWon = true;
-        }
-        if (loserObj) {
-          loserObj._tempWon = false;
-        }
-      }
-    }
+    // Determine which participants should have stats tracked
+    const winnerRank = winnerId === currentPair.left?.id ? currentRanks.left : currentRanks.right;
+    const shouldTrackWinner = battleType === "performers" && isActiveParticipant(winnerId, winnerRank);
+    const shouldTrackLoser = battleType === "performers" && isActiveParticipant(loserId, loserRank);
     
     // Update items in Stash (only if changed)
-    if (winnerChange !== 0) updateItemRating(winnerId, newWinnerRating, winnerObj);
-    if (loserChange !== 0) updateItemRating(loserId, newLoserRating, loserObj);
+    // Pass win/loss status for stats tracking
+    if (winnerChange !== 0) {
+      updateItemRating(winnerId, newWinnerRating, shouldTrackWinner ? winnerObj : null, shouldTrackWinner ? true : null);
+    }
+    if (loserChange !== 0) {
+      updateItemRating(loserId, newLoserRating, shouldTrackLoser ? loserObj : null, shouldTrackLoser ? false : null);
+    }
     
     return { newWinnerRating, newLoserRating, winnerChange, loserChange };
   }
@@ -1627,9 +1630,9 @@ async function fetchPerformerCount(performerFilter = {}) {
     }
   }
 
-  async function updateItemRating(itemId, newRating, itemObj = null) {
+  async function updateItemRating(itemId, newRating, itemObj = null, won = null) {
     if (battleType === "performers") {
-      return await updatePerformerRating(itemId, newRating, itemObj);
+      return await updatePerformerRating(itemId, newRating, itemObj, won);
     } else if (battleType === "images") {
       return await updateImageRating(itemId, newRating);
     } else {
@@ -2226,7 +2229,8 @@ async function fetchPerformerCount(performerFilter = {}) {
           // Falling scene won - found their floor!
           // Set their rating to just above the scene they beat
           const finalRating = Math.min(100, loserRating + 1);
-          updateItemRating(gauntletFallingItem.id, finalRating, gauntletFallingItem);
+          // Track this as a win for the falling performer
+          updateItemRating(gauntletFallingItem.id, finalRating, gauntletFallingItem, true);
           
           // Final rank is one above the opponent (we beat them, so we're above them)
           const opponentRank = loserId === currentPair.left.id ? currentRanks.left : currentRanks.right;
