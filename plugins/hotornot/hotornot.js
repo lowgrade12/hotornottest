@@ -955,6 +955,68 @@ async function fetchPerformerCount(performerFilter = {}) {
   return shuffled.slice(0, 2);
 }
 
+  /**
+   * Calculate a weight for performer selection based on last match time.
+   * More recent matches get lower weights (less likely to be selected).
+   * Returns a weight between 0.1 (very recent) and 1.0 (not recent or no data).
+   * @param {Object} performer - Performer object with custom_fields
+   * @returns {number} Weight value between 0.1 and 1.0
+   */
+  function getRecencyWeight(performer) {
+    const stats = parsePerformerEloData(performer);
+    
+    if (!stats.last_match) {
+      // No previous match - full weight
+      return 1.0;
+    }
+    
+    try {
+      const lastMatchTime = new Date(stats.last_match).getTime();
+      const now = Date.now();
+      const hoursSinceMatch = (now - lastMatchTime) / (1000 * 60 * 60);
+      
+      // Weight calculation:
+      // 0-1 hours ago: weight = 0.1 (very unlikely)
+      // 1-6 hours ago: weight = 0.3 (less likely)
+      // 6-24 hours ago: weight = 0.6 (moderately likely)
+      // 24+ hours ago: weight = 1.0 (full probability)
+      
+      if (hoursSinceMatch < 1) {
+        return 0.1;
+      } else if (hoursSinceMatch < 6) {
+        return 0.3;
+      } else if (hoursSinceMatch < 24) {
+        return 0.6;
+      } else {
+        return 1.0;
+      }
+    } catch (e) {
+      // If date parsing fails, give full weight
+      return 1.0;
+    }
+  }
+
+  /**
+   * Select a weighted random item from an array based on weights.
+   * @param {Array} items - Array of items to choose from
+   * @param {Array} weights - Array of weights (same length as items)
+   * @returns {Object} Selected item
+   */
+  function weightedRandomSelect(items, weights) {
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (let i = 0; i < items.length; i++) {
+      random -= weights[i];
+      if (random <= 0) {
+        return items[i];
+      }
+    }
+    
+    // Fallback to last item if rounding errors occur
+    return items[items.length - 1];
+  }
+
   // Swiss mode: fetch two performers with similar ratings
   async function fetchSwissPairPerformers() {
     const performerFilter = getPerformerFilter();
@@ -985,9 +1047,10 @@ async function fetchPerformerCount(performerFilter = {}) {
       return { performers: await fetchRandomPerformers(2), ranks: [null, null] };
     }
 
-    // Pick a random performer, then find one with similar rating
-    const randomIndex = Math.floor(Math.random() * performers.length);
-    const performer1 = performers[randomIndex];
+    // Pick a random performer, weighted by recency to avoid repetition
+    const weights = performers.map(p => getRecencyWeight(p));
+    const performer1 = weightedRandomSelect(performers, weights);
+    const randomIndex = performers.findIndex(p => p.id === performer1.id);
     const rating1 = performer1.rating100 || 50;
 
     // Find performers within adaptive rating window (tighter for larger pools)
@@ -1001,8 +1064,9 @@ async function fetchPerformerCount(performerFilter = {}) {
     let performer2;
     let performer2Index;
     if (similarPerformers.length > 0) {
-      // Pick random from similar-rated performers
-      performer2 = similarPerformers[Math.floor(Math.random() * similarPerformers.length)];
+      // Pick from similar-rated performers, weighted by recency
+      const similarWeights = similarPerformers.map(p => getRecencyWeight(p));
+      performer2 = weightedRandomSelect(similarPerformers, similarWeights);
       performer2Index = performers.findIndex(s => s.id === performer2.id);
     } else {
       // No similar performers, pick closest
