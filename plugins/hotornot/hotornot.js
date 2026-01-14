@@ -992,6 +992,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
     } catch (e) {
       // If date parsing fails, give full weight
+      console.warn(`[HotOrNot] Failed to parse last_match for performer ${performer.id}:`, e);
       return 1.0;
     }
   }
@@ -1003,7 +1004,25 @@ async function fetchPerformerCount(performerFilter = {}) {
    * @returns {Object} Selected item
    */
   function weightedRandomSelect(items, weights) {
+    // Input validation
+    if (!items || !weights || items.length === 0 || weights.length === 0) {
+      console.error("[HotOrNot] weightedRandomSelect called with empty arrays");
+      return null;
+    }
+    
+    if (items.length !== weights.length) {
+      console.error("[HotOrNot] weightedRandomSelect: items and weights arrays have different lengths");
+      return null;
+    }
+    
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    
+    // Handle edge case of all zero weights
+    if (totalWeight === 0) {
+      console.warn("[HotOrNot] All weights are zero, falling back to random selection");
+      return items[Math.floor(Math.random() * items.length)];
+    }
+    
     let random = Math.random() * totalWeight;
     
     for (let i = 0; i < items.length; i++) {
@@ -1050,6 +1069,18 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Pick a random performer, weighted by recency to avoid repetition
     const weights = performers.map(p => getRecencyWeight(p));
     const performer1 = weightedRandomSelect(performers, weights);
+    
+    // Fallback to pure random if weighted selection fails
+    if (!performer1) {
+      const randomIndex = Math.floor(Math.random() * performers.length);
+      const performer1Fallback = performers[randomIndex];
+      console.warn("[HotOrNot] Weighted selection failed, falling back to random");
+      return { 
+        performers: [performer1Fallback, performers.filter(p => p.id !== performer1Fallback.id)[0]], 
+        ranks: [randomIndex + 1, null] 
+      };
+    }
+    
     const randomIndex = performers.findIndex(p => p.id === performer1.id);
     const rating1 = performer1.rating100 || 50;
 
@@ -1067,6 +1098,13 @@ async function fetchPerformerCount(performerFilter = {}) {
       // Pick from similar-rated performers, weighted by recency
       const similarWeights = similarPerformers.map(p => getRecencyWeight(p));
       performer2 = weightedRandomSelect(similarPerformers, similarWeights);
+      
+      // Fallback to pure random if weighted selection fails
+      if (!performer2) {
+        console.warn("[HotOrNot] Weighted selection for performer2 failed, falling back to random");
+        performer2 = similarPerformers[Math.floor(Math.random() * similarPerformers.length)];
+      }
+      
       performer2Index = performers.findIndex(s => s.id === performer2.id);
     } else {
       // No similar performers, pick closest
