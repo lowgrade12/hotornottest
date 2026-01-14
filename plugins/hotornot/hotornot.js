@@ -1009,7 +1009,7 @@ async function fetchPerformerCount(performerFilter = {}) {
    * Select a weighted random item from an array based on weights.
    * @param {Array} items - Array of items to choose from
    * @param {Array} weights - Array of weights (same length as items)
-   * @returns {Object} Selected item
+   * @returns {Object|null} Selected item, or null if validation fails
    */
   function weightedRandomSelect(items, weights) {
     // Input validation
@@ -1031,9 +1031,9 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
     
-    // Handle edge case of all zero weights
-    if (totalWeight === 0) {
-      console.warn("[HotOrNot] All weights are zero, falling back to random selection");
+    // Handle edge case of all zero or negative weights
+    if (totalWeight <= 0) {
+      console.warn("[HotOrNot] Total weight is zero or negative, falling back to random selection");
       return items[Math.floor(Math.random() * items.length)];
     }
     
