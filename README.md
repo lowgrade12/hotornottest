@@ -89,6 +89,12 @@ In Swiss mode, performer selection uses the `last_match` timestamp to reduce (bu
 
 This ensures variety without completely excluding performers, so they can still appear if they're the best match rating-wise.
 
+**Performance Optimization for Large Libraries:**
+- Libraries with ≤1000 performers: Uses full dataset for accurate ranking
+- Libraries with >1000 performers: Uses intelligent sampling (500 performers) for fast performance
+- Recency weighting and rating-based matching work seamlessly in both modes
+- Optimized for libraries with 15,000+ performers
+
 **Technical Details:**
 - See [APPROACH2_IMPLEMENTATION.md](APPROACH2_IMPLEMENTATION.md) for implementation details
 - See [APPROACH2_SUMMARY.md](APPROACH2_SUMMARY.md) for overview and testing results
