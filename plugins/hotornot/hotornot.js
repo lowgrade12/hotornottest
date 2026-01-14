@@ -1033,7 +1033,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     // Handle edge case of all zero or negative weights
     if (totalWeight <= 0) {
-      console.warn("[HotOrNot] Total weight is zero or negative, falling back to random selection");
+      console.error("[HotOrNot] Total weight is zero or negative - this indicates a logic error");
       return items[Math.floor(Math.random() * items.length)];
     }
     
