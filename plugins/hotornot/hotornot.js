@@ -2187,6 +2187,7 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   async function loadImageSelection() {
+    // Note: Reuses performer selection DOM elements for consistency with UI styling
     const selectionContainer = document.getElementById("hon-performer-selection");
     const imageList = document.getElementById("hon-performer-list");
     
@@ -2206,7 +2207,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       imageList.querySelectorAll('.hon-selection-card').forEach((card) => {
         card.addEventListener('click', () => {
           const imageId = card.dataset.imageId;
-          const selectedImage = images.find(i => i.id.toString() === imageId);
+          const selectedImage = images.find(i => i.id === imageId);
           if (selectedImage) {
             startGauntletWithImage(selectedImage);
           }
@@ -2243,6 +2244,7 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   function showImageSelection() {
+    // Note: Reuses performer selection DOM elements for consistency with UI styling
     const selectionContainer = document.getElementById("hon-performer-selection");
     if (selectionContainer) {
       selectionContainer.style.display = "block";
@@ -2257,6 +2259,7 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   function hideImageSelection() {
+    // Note: Reuses performer selection DOM elements for consistency with UI styling
     const selectionContainer = document.getElementById("hon-performer-selection");
     if (selectionContainer) {
       selectionContainer.style.display = "none";
