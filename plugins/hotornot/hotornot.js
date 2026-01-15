@@ -1008,7 +1008,7 @@ async function fetchPerformerCount(performerFilter = {}) {
    */
   async function fetchPerformerById(performerId) {
     // Validate performerId is a valid non-empty string
-    if (!performerId || typeof performerId !== 'string' || performerId.trim() === '') {
+    if (!performerId?.trim?.()) {
       return null;
     }
     
