@@ -206,6 +206,26 @@
   }
 
   /**
+   * Create a numeric filter object with support for value2 (BETWEEN modifier)
+   * @param {*} value - Value to parse (can be a number or an object with value and value2)
+   * @param {string} modifier - The filter modifier (e.g., 'BETWEEN', 'GREATER_THAN')
+   * @param {string} defaultModifier - Default modifier if none provided
+   * @returns {Object} Filter object with value, modifier, and optionally value2
+   */
+  function createNumericFilterObject(value, modifier, defaultModifier) {
+    const filterObj = {
+      value: safeParseInt(value, 0),
+      modifier: modifier || defaultModifier
+    };
+    // Handle BETWEEN modifier which requires value2
+    // value can be an object like { "value": 20, "value2": 30 }
+    if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+      filterObj.value2 = safeParseInt(value.value2, 0);
+    }
+    return filterObj;
+  }
+
+  /**
    * Convert a single criterion from URL format to GraphQL PerformerFilterType format
    * @param {Object} criterion - Single criterion object from URL
    * @returns {Object|null} GraphQL filter object or null if not applicable
@@ -276,17 +296,8 @@
       case 'rating100':
         // Rating filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'GREATER_THAN'
-          };
-          // Handle BETWEEN modifier which requires value2
-          // value can be an object like { "value": 20, "value2": 30 }
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            rating100: filterObj
+            rating100: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -294,16 +305,8 @@
       case 'age':
         // Age filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'EQUALS'
-          };
-          // Handle BETWEEN modifier which requires value2
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            age: filterObj
+            age: createNumericFilterObject(value, modifier, 'EQUALS')
           };
         }
         break;
@@ -371,16 +374,8 @@
       case 'scene_count':
         // Scene count filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'GREATER_THAN'
-          };
-          // Handle BETWEEN modifier which requires value2
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            scene_count: filterObj
+            scene_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -388,16 +383,8 @@
       case 'image_count':
         // Image count filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'GREATER_THAN'
-          };
-          // Handle BETWEEN modifier which requires value2
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            image_count: filterObj
+            image_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -405,16 +392,8 @@
       case 'gallery_count':
         // Gallery count filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'GREATER_THAN'
-          };
-          // Handle BETWEEN modifier which requires value2
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            gallery_count: filterObj
+            gallery_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -422,16 +401,8 @@
       case 'o_counter':
         // O-counter filter
         if (value !== undefined && value !== null) {
-          const filterObj = {
-            value: safeParseInt(value, 0),
-            modifier: modifier || 'GREATER_THAN'
-          };
-          // Handle BETWEEN modifier which requires value2
-          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
-            filterObj.value2 = safeParseInt(value.value2, 0);
-          }
           return {
-            o_counter: filterObj
+            o_counter: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
