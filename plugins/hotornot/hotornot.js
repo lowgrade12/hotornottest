@@ -578,8 +578,9 @@ async function fetchSceneCount() {
       rating: Math.round(newRating)
     };
     
-    // Update stats if performer object and win/loss result provided
-    if (performerObj && battleType === "performers" && won !== null) {
+    // Update stats if performer object provided (won can be true/false/null)
+    // won=true: winner with full stats, won=false: loser with full stats, won=null: participation only (no win/loss)
+    if (performerObj && battleType === "performers" && won !== undefined) {
       const currentStats = parsePerformerEloData(performerObj);
       
       // Update stats based on match outcome
@@ -680,16 +681,30 @@ async function fetchSceneCount() {
   /**
    * Update performer stats after a match
    * @param {Object} currentStats - Current stats object from parsePerformerEloData
-   * @param {boolean} won - True if performer won, false if lost
+   * @param {boolean|null} won - True if performer won, false if lost, null for participation-only (no win/loss tracking)
    * @returns {Object} Updated stats object
    */
   function updatePerformerStats(currentStats, won) {
+    // Base stats that always update
     const newStats = {
       total_matches: currentStats.total_matches + 1,
-      wins: won ? currentStats.wins + 1 : currentStats.wins,
-      losses: won ? currentStats.losses : currentStats.losses + 1,
       last_match: new Date().toISOString()
     };
+    
+    // If won is null, this is participation-only (gauntlet/champion defender benchmark)
+    // Only increment match count and timestamp, don't track win/loss or streaks
+    if (won === null) {
+      newStats.wins = currentStats.wins;
+      newStats.losses = currentStats.losses;
+      newStats.current_streak = currentStats.current_streak;
+      newStats.best_streak = currentStats.best_streak;
+      newStats.worst_streak = currentStats.worst_streak;
+      return newStats;
+    }
+    
+    // Track win/loss
+    newStats.wins = won ? currentStats.wins + 1 : currentStats.wins;
+    newStats.losses = won ? currentStats.losses : currentStats.losses + 1;
     
     // Calculate current streak
     if (won) {
@@ -855,12 +870,21 @@ async function fetchSceneCount() {
     const shouldTrackLoser = battleType === "performers" && isActiveParticipant(loserId, loserRank);
     
     // Update items in Stash (only if changed)
-    // Pass win/loss status for stats tracking
+    // Pass win/loss status for stats tracking:
+    // - true/false for active participants (track full stats)
+    // - null for defenders in gauntlet/champion mode (track participation only)
     if (winnerChange !== 0) {
       updateItemRating(winnerId, newWinnerRating, shouldTrackWinner ? winnerObj : null, shouldTrackWinner ? true : null);
+    } else if (battleType === "performers" && winnerObj && !shouldTrackWinner && (currentMode === "gauntlet" || currentMode === "champion")) {
+      // Even if rating didn't change, track participation for defenders in gauntlet/champion
+      updateItemRating(winnerId, newWinnerRating, winnerObj, null);
     }
+    
     if (loserChange !== 0) {
       updateItemRating(loserId, newLoserRating, shouldTrackLoser ? loserObj : null, shouldTrackLoser ? false : null);
+    } else if (battleType === "performers" && loserObj && !shouldTrackLoser && (currentMode === "gauntlet" || currentMode === "champion")) {
+      // Even if rating didn't change, track participation for defenders in gauntlet/champion
+      updateItemRating(loserId, newLoserRating, loserObj, null);
     }
     
     return { newWinnerRating, newLoserRating, winnerChange, loserChange };
