@@ -134,11 +134,15 @@
         for (const criteriaStr of criteriaStrings) {
           try {
             // Stash may encode criteria with parentheses instead of curly braces
-            // Convert parentheses to curly braces for JSON parsing
+            // Convert ALL parentheses to curly braces for JSON parsing (including nested ones)
+            // NOTE: This is safe because we only reach this code if standard JSON.parse failed
+            // at line 115, meaning the input is not valid JSON. If it had properly quoted
+            // strings with parentheses, it would have parsed successfully in the first attempt.
             let normalized = criteriaStr.trim();
-            if (normalized.startsWith('(') && normalized.endsWith(')')) {
-              normalized = '{' + normalized.slice(1, -1) + '}';
-            }
+            // Replace all opening parentheses with curly braces
+            normalized = normalized.replace(/\(/g, '{');
+            // Replace all closing parentheses with curly braces
+            normalized = normalized.replace(/\)/g, '}');
             const criterion = JSON.parse(normalized);
             if (criterion && criterion.type) {
               parsedCriteria.push(criterion);
@@ -202,6 +206,26 @@
     }
     const parsed = parseInt(simpleValue, 10);
     return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  /**
+   * Create a numeric filter object with support for value2 (BETWEEN modifier)
+   * @param {*} value - Value to parse (can be a number or an object with value and value2)
+   * @param {string} modifier - The filter modifier (e.g., 'BETWEEN', 'GREATER_THAN')
+   * @param {string} defaultModifier - Default modifier if none provided
+   * @returns {Object} Filter object with value, modifier, and optionally value2
+   */
+  function createNumericFilterObject(value, modifier, defaultModifier) {
+    const filterObj = {
+      value: safeParseInt(value, 0),
+      modifier: modifier || defaultModifier
+    };
+    // Handle BETWEEN modifier which requires value2
+    // value can be an object like { "value": 20, "value2": 30 }
+    if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+      filterObj.value2 = safeParseInt(value.value2, 0);
+    }
+    return filterObj;
   }
 
   /**
@@ -276,10 +300,7 @@
         // Rating filter
         if (value !== undefined && value !== null) {
           return {
-            rating100: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            rating100: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -288,10 +309,7 @@
         // Age filter
         if (value !== undefined && value !== null) {
           return {
-            age: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'EQUALS'
-            }
+            age: createNumericFilterObject(value, modifier, 'EQUALS')
           };
         }
         break;
@@ -360,10 +378,7 @@
         // Scene count filter
         if (value !== undefined && value !== null) {
           return {
-            scene_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            scene_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -372,10 +387,7 @@
         // Image count filter
         if (value !== undefined && value !== null) {
           return {
-            image_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            image_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -384,10 +396,7 @@
         // Gallery count filter
         if (value !== undefined && value !== null) {
           return {
-            gallery_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            gallery_count: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
@@ -396,10 +405,7 @@
         // O-counter filter
         if (value !== undefined && value !== null) {
           return {
-            o_counter: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            o_counter: createNumericFilterObject(value, modifier, 'GREATER_THAN')
           };
         }
         break;
