@@ -151,7 +151,35 @@
   }
 
   /**
+   * Extract a simple value from a potentially nested criterion value object.
+   * Stash URL criteria can have values in different formats:
+   * - Simple: "FEMALE" or 50
+   * - Nested: { "value": "FEMALE" } or { "value": 50, "value2": 100 }
+   * @param {*} value - Value to extract from
+   * @returns {*} The extracted simple value, or the original if already simple
+   */
+  function extractSimpleValue(value) {
+    if (value === undefined || value === null) {
+      return value;
+    }
+    // If it's an object with a "value" property, extract it
+    // Note: We use !== undefined rather than hasOwnProperty because:
+    // - If value.value is null, we want to return null (filter should not apply)
+    // - If value.value is undefined, the property doesn't exist, so return original
+    if (typeof value === 'object' && !Array.isArray(value) && value.value !== undefined) {
+      return value.value;
+    }
+    // If it's an array, return it as-is (for multi-value filters)
+    if (Array.isArray(value)) {
+      return value;
+    }
+    // Otherwise return the value as-is
+    return value;
+  }
+
+  /**
    * Safely parse an integer value, returning a default if parsing fails
+   * Handles nested value objects from URL criteria (e.g., { "value": 50 })
    * @param {*} value - Value to parse
    * @param {number} defaultValue - Default value if parsing fails (default: 0)
    * @returns {number} Parsed integer or default value
@@ -160,7 +188,12 @@
     if (value === undefined || value === null) {
       return defaultValue;
     }
-    const parsed = parseInt(value, 10);
+    // Extract from nested object if needed
+    const simpleValue = extractSimpleValue(value);
+    if (simpleValue === undefined || simpleValue === null) {
+      return defaultValue;
+    }
+    const parsed = parseInt(simpleValue, 10);
     return isNaN(parsed) ? defaultValue : parsed;
   }
 
@@ -207,21 +240,26 @@
         
       case 'gender':
         // Gender filter (already handled by our default, but can be overridden)
+        // Extract simple value from potential nested object (e.g., { "value": "FEMALE" } -> "FEMALE")
         if (value) {
-          return {
-            gender: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const genderValue = extractSimpleValue(value);
+          if (genderValue) {
+            return {
+              gender: {
+                value: genderValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'favorite':
         // Favorite filter
         if (value !== undefined && value !== null) {
+          const favValue = extractSimpleValue(value);
           return {
-            filter_favorites: value === true || value === 'true'
+            filter_favorites: favValue === true || favValue === 'true'
           };
         }
         break;
@@ -254,48 +292,60 @@
       case 'ethnicity':
         // Ethnicity filter
         if (value) {
-          return {
-            ethnicity: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const ethnicityValue = extractSimpleValue(value);
+          if (ethnicityValue) {
+            return {
+              ethnicity: {
+                value: ethnicityValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'country':
         // Country filter
         if (value) {
-          return {
-            country: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const countryValue = extractSimpleValue(value);
+          if (countryValue) {
+            return {
+              country: {
+                value: countryValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'hair_color':
         // Hair color filter
         if (value) {
-          return {
-            hair_color: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const hairColorValue = extractSimpleValue(value);
+          if (hairColorValue) {
+            return {
+              hair_color: {
+                value: hairColorValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'eye_color':
         // Eye color filter
         if (value) {
-          return {
-            eye_color: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const eyeColorValue = extractSimpleValue(value);
+          if (eyeColorValue) {
+            return {
+              eye_color: {
+                value: eyeColorValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
@@ -350,6 +400,8 @@
       case 'stash_id':
       case 'stash_id_endpoint':
         // Stash ID filter - performer has a stash ID at a specific endpoint
+        // Note: This filter intentionally does NOT use extractSimpleValue() because
+        // the value itself is expected to be an object with stash_id and/or endpoint properties
         // The structure depends on what's in the value object
         if (value && typeof value === 'object') {
           const stashIdFilter = {};
@@ -371,21 +423,27 @@
       case 'is_missing':
         // Is missing filter
         if (value) {
-          return {
-            is_missing: value
-          };
+          const missingValue = extractSimpleValue(value);
+          if (missingValue) {
+            return {
+              is_missing: missingValue
+            };
+          }
         }
         break;
         
       case 'name':
         // Name filter (text search)
         if (value) {
-          return {
-            name: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const nameValue = extractSimpleValue(value);
+          if (nameValue) {
+            return {
+              name: {
+                value: nameValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
@@ -393,120 +451,150 @@
       case 'aliases':
         // Alias filter
         if (value) {
-          return {
-            aliases: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const aliasValue = extractSimpleValue(value);
+          if (aliasValue) {
+            return {
+              aliases: {
+                value: aliasValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'details':
         // Details/bio filter
         if (value) {
-          return {
-            details: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const detailsValue = extractSimpleValue(value);
+          if (detailsValue) {
+            return {
+              details: {
+                value: detailsValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'career_length':
         // Career length filter
         if (value) {
-          return {
-            career_length: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const careerValue = extractSimpleValue(value);
+          if (careerValue) {
+            return {
+              career_length: {
+                value: careerValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'tattoos':
         // Tattoos filter
         if (value) {
-          return {
-            tattoos: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const tattoosValue = extractSimpleValue(value);
+          if (tattoosValue) {
+            return {
+              tattoos: {
+                value: tattoosValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'piercings':
         // Piercings filter
         if (value) {
-          return {
-            piercings: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const piercingsValue = extractSimpleValue(value);
+          if (piercingsValue) {
+            return {
+              piercings: {
+                value: piercingsValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'url':
         // URL filter
         if (value) {
-          return {
-            url: {
-              value: value,
-              modifier: modifier || 'INCLUDES'
-            }
-          };
+          const urlValue = extractSimpleValue(value);
+          if (urlValue) {
+            return {
+              url: {
+                value: urlValue,
+                modifier: modifier || 'INCLUDES'
+              }
+            };
+          }
         }
         break;
         
       case 'birthdate':
         // Birthdate filter
         if (value) {
-          return {
-            birthdate: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const birthdateValue = extractSimpleValue(value);
+          if (birthdateValue) {
+            return {
+              birthdate: {
+                value: birthdateValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'death_date':
         // Death date filter
         if (value) {
-          return {
-            death_date: {
-              value: value,
-              modifier: modifier || 'EQUALS'
-            }
-          };
+          const deathDateValue = extractSimpleValue(value);
+          if (deathDateValue) {
+            return {
+              death_date: {
+                value: deathDateValue,
+                modifier: modifier || 'EQUALS'
+              }
+            };
+          }
         }
         break;
         
       case 'created_at':
         // Created at filter
         if (value) {
-          return {
-            created_at: {
-              value: value,
-              modifier: modifier || 'GREATER_THAN'
-            }
-          };
+          const createdValue = extractSimpleValue(value);
+          if (createdValue) {
+            return {
+              created_at: {
+                value: createdValue,
+                modifier: modifier || 'GREATER_THAN'
+              }
+            };
+          }
         }
         break;
         
       case 'updated_at':
         // Updated at filter
         if (value) {
-          return {
-            updated_at: {
-              value: value,
-              modifier: modifier || 'GREATER_THAN'
-            }
-          };
+          const updatedValue = extractSimpleValue(value);
+          if (updatedValue) {
+            return {
+              updated_at: {
+                value: updatedValue,
+                modifier: modifier || 'GREATER_THAN'
+              }
+            };
+          }
         }
         break;
         
