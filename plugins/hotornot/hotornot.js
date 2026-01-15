@@ -1208,28 +1208,17 @@ async function fetchSceneCount() {
       
       // Handle ethnicity filter
       if (criteria.type === 'ethnicity' && criteria.value?.value) {
-        let ethnicityValue = criteria.value.value;
-        // If value is an array, extract the first element
-        if (Array.isArray(ethnicityValue)) {
-          ethnicityValue = ethnicityValue.length > 0 ? ethnicityValue[0] : null;
-        }
-        if (ethnicityValue) {
-          filter.ethnicity = {
-            value: ethnicityValue,
-            modifier: criteria.modifier || 'EQUALS'
-          };
-          console.log('[HotOrNot] Applied ethnicity filter:', filter.ethnicity);
-        }
+        filter.ethnicity = {
+          value: criteria.value.value,
+          modifier: criteria.modifier || 'EQUALS'
+        };
+        console.log('[HotOrNot] Applied ethnicity filter:', filter.ethnicity);
       }
       
       // Handle country filter
       if (criteria.type === 'country') {
         // Country filter can have value directly or nested in value object
-        let countryValue = criteria.value?.value || criteria.value;
-        // If value is an array, extract the first element
-        if (Array.isArray(countryValue)) {
-          countryValue = countryValue.length > 0 ? countryValue[0] : null;
-        }
+        const countryValue = criteria.value?.value || criteria.value;
         if (countryValue) {
           filter.country = {
             value: countryValue,
@@ -1242,11 +1231,7 @@ async function fetchSceneCount() {
       // Handle gender filter
       if (criteria.type === 'gender') {
         // Gender filter can have value directly or nested in value object
-        let genderValue = criteria.value?.value || criteria.value;
-        // If value is an array, extract the first element
-        if (Array.isArray(genderValue)) {
-          genderValue = genderValue.length > 0 ? genderValue[0] : null;
-        }
+        const genderValue = criteria.value?.value || criteria.value;
         if (genderValue) {
           filter.gender = {
             value: genderValue,

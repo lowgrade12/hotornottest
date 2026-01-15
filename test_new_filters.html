@@ -73,7 +73,6 @@
         
         <button onclick="testGenderFilter()">Test Gender Filter (FEMALE)</button>
         <button onclick="testGenderFilterExcludes()">Test Gender Filter (EXCLUDES MALE)</button>
-        <button onclick="testGenderFilterArray()">Test Gender Filter (Array Value)</button>
         <div id="gender-result" class="result"></div>
     </div>
 
@@ -158,11 +157,7 @@
                 
                 // Handle country filter
                 if (criteria.type === 'country') {
-                    let countryValue = criteria.value?.value || criteria.value;
-                    // If value is an array, extract the first element
-                    if (Array.isArray(countryValue)) {
-                        countryValue = countryValue.length > 0 ? countryValue[0] : null;
-                    }
+                    const countryValue = criteria.value?.value || criteria.value;
                     if (countryValue) {
                         filter.country = {
                             value: countryValue,
@@ -173,11 +168,7 @@
                 
                 // Handle gender filter
                 if (criteria.type === 'gender') {
-                    let genderValue = criteria.value?.value || criteria.value;
-                    // If value is an array, extract the first element
-                    if (Array.isArray(genderValue)) {
-                        genderValue = genderValue.length > 0 ? genderValue[0] : null;
-                    }
+                    const genderValue = criteria.value?.value || criteria.value;
                     if (genderValue) {
                         filter.gender = {
                             value: genderValue,
@@ -245,33 +236,6 @@
             } else {
                 result.className = 'result error';
                 result.textContent = 'FAILED: Gender EXCLUDES filter not applied correctly\n' + JSON.stringify(converted, null, 2);
-            }
-        }
-
-        function testGenderFilterArray() {
-            const result = document.getElementById('gender-result');
-            
-            // Simulate gender filter with array value: INCLUDES ["Transgender Female"]
-            // This is the exact format from the problem statement
-            const filterData = {
-                type: "gender",
-                modifier: "INCLUDES",
-                value: ["Transgender Female"]
-            };
-            
-            const activeFilters = {
-                criteria: filterData,
-                hasFilters: true
-            };
-            
-            const converted = convertToPerformerFilter(activeFilters);
-            
-            if (converted.gender && converted.gender.value === "Transgender Female") {
-                result.className = 'result success';
-                result.textContent = 'SUCCESS! Gender filter with array value applied (extracted first element):\n' + JSON.stringify(converted, null, 2);
-            } else {
-                result.className = 'result error';
-                result.textContent = 'FAILED: Gender filter with array value not handled correctly\n' + JSON.stringify(converted, null, 2);
             }
         }
 
