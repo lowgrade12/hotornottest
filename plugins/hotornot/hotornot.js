@@ -19,7 +19,7 @@
   // GraphQL filter modifier constants
   // Array-based modifiers require value_list field for enum-based criterion inputs
   // (e.g., GenderCriterionInput). Non-enum filters like StringCriterionInput use 'value' field.
-  const ARRAY_BASED_MODIFIERS = ['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL'];
+  const ARRAY_BASED_MODIFIERS = new Set(['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL']);
 
   // ============================================
   // GRAPHQL QUERIES
@@ -283,10 +283,10 @@
             const effectiveModifier = modifier || 'EQUALS';
             // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
             // Use value for single-value modifiers (EQUALS, NOT_EQUALS)
-            const useValueList = ARRAY_BASED_MODIFIERS.includes(effectiveModifier);
+            const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
             
             if (useValueList) {
-              // Ensure genderValue is an array
+              // Convert genderValue to array format for value_list field
               const genderArray = Array.isArray(genderValue) ? genderValue : [genderValue];
               return {
                 gender: {
