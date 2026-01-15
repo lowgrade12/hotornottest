@@ -1575,7 +1575,7 @@ async function fetchPerformerCount(performerFilter = {}) {
   const performerFilter = getPerformerFilter();
   const totalPerformers = await fetchPerformerCount(performerFilter);
   if (totalPerformers < 2) {
-    throw new Error("Not enough performers for comparison. You need at least 2 non-male performers with images.");
+    throw new Error("Not enough performers for comparison. You need at least 2 non-male performers.");
   }
 
   const performerQuery = `
