@@ -107,7 +107,7 @@
         return [];
       }
       
-      console.log('[HotOrNot] Raw filter criteria from URL:', criteriaParams);
+      console.log(`[HotOrNot] Found ${criteriaParams.length} filter parameter(s) in URL:`, criteriaParams);
       
       const allParsedCriteria = [];
       
