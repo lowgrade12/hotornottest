@@ -14,6 +14,7 @@
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
+  let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
   // ============================================
   // GRAPHQL QUERIES
@@ -80,6 +81,453 @@
       image
     }
   `;
+
+  // ============================================
+  // URL FILTER PARSING
+  // ============================================
+
+  /**
+   * Parse filter criteria from URL query parameters
+   * Stash encodes filter criteria in the 'c' parameter as JSON
+   * @returns {Array} Array of filter criteria objects
+   */
+  function parseUrlFilterCriteria() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const criteriaParam = urlParams.get('c');
+      
+      if (!criteriaParam) {
+        return [];
+      }
+      
+      // The 'c' parameter contains encoded JSON criteria
+      // Try to decode and parse it
+      const decoded = decodeURIComponent(criteriaParam);
+      
+      // Stash uses a custom encoding format for criteria
+      // It can be a JSON array or individual criteria strings
+      // Try parsing as JSON first
+      try {
+        const criteria = JSON.parse(decoded);
+        return Array.isArray(criteria) ? criteria : [criteria];
+      } catch (e) {
+        // If not valid JSON, it might be the newer Stash encoding
+        // Try parsing as a single criterion object string
+        // Format: {"type":"tags","value":{"items":["id1","id2"],"depth":0},"modifier":"INCLUDES"}
+        
+        // Multiple criteria are separated - split by },{ pattern (without lookbehind for compatibility)
+        // Replace },{ with a unique delimiter, then split
+        const delimiter = '|||SPLIT|||';
+        const withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
+        const criteriaStrings = withDelimiter.split(delimiter);
+        const parsedCriteria = [];
+        
+        for (const criteriaStr of criteriaStrings) {
+          try {
+            const criterion = JSON.parse(criteriaStr.trim());
+            if (criterion && criterion.type) {
+              parsedCriteria.push(criterion);
+            }
+          } catch (parseErr) {
+            console.warn('[HotOrNot] Could not parse criterion:', criteriaStr);
+          }
+        }
+        
+        return parsedCriteria;
+      }
+    } catch (e) {
+      console.warn('[HotOrNot] Error parsing URL filter criteria:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Safely parse an integer value, returning a default if parsing fails
+   * @param {*} value - Value to parse
+   * @param {number} defaultValue - Default value if parsing fails (default: 0)
+   * @returns {number} Parsed integer or default value
+   */
+  function safeParseInt(value, defaultValue = 0) {
+    if (value === undefined || value === null) {
+      return defaultValue;
+    }
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  /**
+   * Convert a single criterion from URL format to GraphQL PerformerFilterType format
+   * @param {Object} criterion - Single criterion object from URL
+   * @returns {Object|null} GraphQL filter object or null if not applicable
+   */
+  function convertCriterionToFilter(criterion) {
+    if (!criterion || !criterion.type) {
+      return null;
+    }
+
+    const { type, value, modifier } = criterion;
+    
+    // Map URL criterion types to GraphQL filter fields
+    // The filter structure varies based on the criterion type
+    switch (type) {
+      case 'tags':
+        // Tags filter: value contains items (tag IDs) and depth
+        if (value && value.items && value.items.length > 0) {
+          return {
+            tags: {
+              value: value.items,
+              modifier: modifier || 'INCLUDES',
+              depth: value.depth || 0
+            }
+          };
+        }
+        break;
+        
+      case 'studios':
+        // Studios filter
+        if (value && value.items && value.items.length > 0) {
+          return {
+            studios: {
+              value: value.items,
+              modifier: modifier || 'INCLUDES',
+              depth: value.depth || 0
+            }
+          };
+        }
+        break;
+        
+      case 'gender':
+        // Gender filter (already handled by our default, but can be overridden)
+        if (value) {
+          return {
+            gender: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'favorite':
+        // Favorite filter
+        if (value !== undefined && value !== null) {
+          return {
+            filter_favorites: value === true || value === 'true'
+          };
+        }
+        break;
+        
+      case 'rating':
+      case 'rating100':
+        // Rating filter
+        if (value !== undefined && value !== null) {
+          return {
+            rating100: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'age':
+        // Age filter
+        if (value !== undefined && value !== null) {
+          return {
+            age: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'ethnicity':
+        // Ethnicity filter
+        if (value) {
+          return {
+            ethnicity: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'country':
+        // Country filter
+        if (value) {
+          return {
+            country: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'hair_color':
+        // Hair color filter
+        if (value) {
+          return {
+            hair_color: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'eye_color':
+        // Eye color filter
+        if (value) {
+          return {
+            eye_color: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'scene_count':
+        // Scene count filter
+        if (value !== undefined && value !== null) {
+          return {
+            scene_count: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'image_count':
+        // Image count filter
+        if (value !== undefined && value !== null) {
+          return {
+            image_count: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'gallery_count':
+        // Gallery count filter
+        if (value !== undefined && value !== null) {
+          return {
+            gallery_count: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'o_counter':
+        // O-counter filter
+        if (value !== undefined && value !== null) {
+          return {
+            o_counter: {
+              value: safeParseInt(value, 0),
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'stash_id':
+      case 'stash_id_endpoint':
+        // Stash ID filter - performer has a stash ID at a specific endpoint
+        // The structure depends on what's in the value object
+        if (value && typeof value === 'object') {
+          const stashIdFilter = {};
+          if (value.stash_id) {
+            stashIdFilter.stash_id = value.stash_id;
+          }
+          if (value.endpoint) {
+            stashIdFilter.endpoint = value.endpoint;
+          }
+          if (Object.keys(stashIdFilter).length > 0) {
+            stashIdFilter.modifier = modifier || 'NOT_NULL';
+            return {
+              stash_id_endpoint: stashIdFilter
+            };
+          }
+        }
+        break;
+        
+      case 'is_missing':
+        // Is missing filter
+        if (value) {
+          return {
+            is_missing: value
+          };
+        }
+        break;
+        
+      case 'name':
+        // Name filter (text search)
+        if (value) {
+          return {
+            name: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'alias':
+      case 'aliases':
+        // Alias filter
+        if (value) {
+          return {
+            aliases: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'details':
+        // Details/bio filter
+        if (value) {
+          return {
+            details: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'career_length':
+        // Career length filter
+        if (value) {
+          return {
+            career_length: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'tattoos':
+        // Tattoos filter
+        if (value) {
+          return {
+            tattoos: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'piercings':
+        // Piercings filter
+        if (value) {
+          return {
+            piercings: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'url':
+        // URL filter
+        if (value) {
+          return {
+            url: {
+              value: value,
+              modifier: modifier || 'INCLUDES'
+            }
+          };
+        }
+        break;
+        
+      case 'birthdate':
+        // Birthdate filter
+        if (value) {
+          return {
+            birthdate: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'death_date':
+        // Death date filter
+        if (value) {
+          return {
+            death_date: {
+              value: value,
+              modifier: modifier || 'EQUALS'
+            }
+          };
+        }
+        break;
+        
+      case 'created_at':
+        // Created at filter
+        if (value) {
+          return {
+            created_at: {
+              value: value,
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      case 'updated_at':
+        // Updated at filter
+        if (value) {
+          return {
+            updated_at: {
+              value: value,
+              modifier: modifier || 'GREATER_THAN'
+            }
+          };
+        }
+        break;
+        
+      default:
+        console.log(`[HotOrNot] Unknown criterion type: ${type}`);
+        return null;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Parse URL filters and convert them to GraphQL PerformerFilterType format
+   * @returns {Object} GraphQL performer filter object
+   */
+  function getUrlPerformerFilter() {
+    const criteria = parseUrlFilterCriteria();
+    const filter = {};
+    
+    for (const criterion of criteria) {
+      const filterPart = convertCriterionToFilter(criterion);
+      if (filterPart) {
+        // Merge the filter part into the main filter
+        // Handle nested AND/OR logic if needed
+        Object.assign(filter, filterPart);
+      }
+    }
+    
+    return filter;
+  }
 
 async function fetchSceneCount() {
     const countQuery = `
@@ -993,16 +1441,27 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   function getPerformerFilter() {
-    const filter = {};
-    // Exclude male performers
-    filter.gender = {
-      value: "MALE",
-      modifier: "EXCLUDES"
-    };
-    // Exclude performers without images by filtering out those where image is missing
-    filter.NOT = {
-      is_missing: "image"
-    };
+    // Start with URL filters from the current page (cached when modal opens)
+    const urlFilter = cachedUrlFilter || {};
+    const filter = { ...urlFilter };
+    
+    // Apply default filters only if not overridden by URL filters
+    
+    // Exclude male performers (unless URL filter specifies a gender)
+    if (!filter.gender) {
+      filter.gender = {
+        value: "MALE",
+        modifier: "EXCLUDES"
+      };
+    }
+    
+    // Exclude performers without images (unless URL filter specifies is_missing)
+    if (!filter.NOT && !filter.is_missing) {
+      filter.NOT = {
+        is_missing: "image"
+      };
+    }
+    
     return filter;
   }
 
@@ -2598,8 +3057,17 @@ function addFloatingButton() {
       battleType = "images";
       // For images, always use Swiss mode
       currentMode = "swiss";
+      // Images don't use URL filters
+      cachedUrlFilter = null;
     } else {
       battleType = "performers";
+      // Cache URL filters for performers when modal opens
+      cachedUrlFilter = getUrlPerformerFilter();
+      
+      // Log cached filter for debugging
+      if (cachedUrlFilter && Object.keys(cachedUrlFilter).length > 0) {
+        console.log('[HotOrNot] Using URL filters for performers:', cachedUrlFilter);
+      }
     }
     
     const existingModal = document.getElementById("hon-modal");

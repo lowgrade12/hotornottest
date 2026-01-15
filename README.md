@@ -34,10 +34,16 @@ Optional Step: Change Rating System Type to "Decimal" (Settings → Interface �
 
 ### For Performers:
 1. Navigate to the **Performers** page in Stash
-2. Click the floating 🔥 button in the bottom-right corner
-3. Choose your preferred comparison mode
-4. Click on a performer (or use arrow keys) to pick the winner
-5. Watch your rankings evolve over time!
+2. **Optional:** Apply filters to narrow down performers (by tags, studios, favorites, etc.)
+3. Click the floating 🔥 button in the bottom-right corner
+4. Choose your preferred comparison mode
+5. Click on a performer (or use arrow keys) to pick the winner
+6. Watch your rankings evolve over time!
+
+**New Feature - Filter Support:** The plugin now respects your currently active filters! If you've filtered the performers page (e.g., by a specific tag or studio), the HotOrNot battles will only include performers matching those filters. This allows you to:
+- Run battles within specific categories (e.g., only performers with a "Favorite" tag)
+- Compare performers from a specific studio
+- Focus on performers matching specific criteria
 
 ### For Images:
 1. Navigate to the **Images** page in Stash
