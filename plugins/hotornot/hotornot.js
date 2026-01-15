@@ -1156,14 +1156,15 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
       
       try {
-        // Skip if no value
+        // Skip if no value (also filters out null early, so type check below won't see null)
         if (criterion.value === undefined || criterion.value === null) {
           console.warn(`[HotOrNot] Criterion "${criterion.type}" has no value, skipping`);
           return;
         }
         
-        // Basic validation: criterion values should be objects, strings, numbers, or arrays
+        // Basic validation: criterion values should be objects, strings, numbers, booleans, or arrays
         // Note: Arrays are objects in JavaScript, so check Array.isArray first
+        // Note: null is already filtered out above, so typeof 'object' here means real objects
         if (!Array.isArray(criterion.value) && 
             typeof criterion.value !== 'object' && 
             typeof criterion.value !== 'string' && 
