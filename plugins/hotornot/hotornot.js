@@ -993,23 +993,24 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   /**
-   * Read the active performer filter from Stash's localStorage.
+   * Read the active performer filter from Stash.
    * 
-   * Stash stores filter state in localStorage under the key 'filter.performers'.
-   * The stored object is a serialized ListFilterModel containing:
-   * - criteria: Array of Criterion objects (needs conversion)
-   * - searchTerm: String search query
-   * - sortBy, sortDirection: Sorting options
-   * - etc.
-   * 
-   * We need to convert the criteria array into the GraphQL PerformerFilterType format.
+   * STRATEGY:
+   * 1. Try to read from URL query parameters (most reliable, as Stash syncs filters to URL)
+   * 2. Fall back to localStorage if URL has no filter
+   * 3. Fall back to default filter if neither works
    * 
    * @returns {Object} PerformerFilterType object for GraphQL queries
    */
   function getPerformerFilter() {
-    const filter = {};
+    // First, try to read from URL query params (Stash keeps them in sync)
+    const urlFilter = getFilterFromURL();
+    if (urlFilter && Object.keys(urlFilter).length > 0) {
+      console.log('[HotOrNot] Using filter from URL:', urlFilter);
+      return urlFilter;
+    }
     
-    // Try to read the active filter from the performers page
+    // Fall back to localStorage
     try {
       const savedFilter = localStorage.getItem('filter.performers');
       if (!savedFilter) {
@@ -1044,6 +1045,48 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     // Fallback to default filter
     return getDefaultFilter();
+  }
+  
+  /**
+   * Extract filter from URL query parameters.
+   * Stash stores filter state in the URL using the 'c' parameter (criteria).
+   * Each 'c' param is a JSON-encoded criterion.
+   * 
+   * @returns {Object} Converted filter object or null
+   */
+  function getFilterFromURL() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const criteriaParams = params.getAll('c');
+      
+      if (criteriaParams.length === 0) {
+        return null;
+      }
+      
+      console.log('[HotOrNot] Found criteria in URL:', criteriaParams);
+      
+      const criteria = [];
+      for (const encodedCriterion of criteriaParams) {
+        try {
+          // Stash encodes criteria as JSON with ( ) instead of { }
+          // Decode it back to JSON format
+          let jsonString = decodeURIComponent(encodedCriterion);
+          jsonString = jsonString.replace(/\(/g, '{').replace(/\)/g, '}');
+          const criterion = JSON.parse(jsonString);
+          criteria.push(criterion);
+        } catch (err) {
+          console.warn('[HotOrNot] Failed to parse criterion from URL:', encodedCriterion, err);
+        }
+      }
+      
+      if (criteria.length > 0) {
+        return convertCriteriaToFilter(criteria);
+      }
+    } catch (e) {
+      console.warn('[HotOrNot] Failed to read filter from URL:', e);
+    }
+    
+    return null;
   }
   
   /**
