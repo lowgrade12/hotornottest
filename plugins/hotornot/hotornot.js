@@ -97,19 +97,25 @@
       const criteriaParam = urlParams.get('c');
       
       if (!criteriaParam) {
+        console.log('[HotOrNot] No filter criteria found in URL (no "c" parameter)');
         return [];
       }
+      
+      console.log('[HotOrNot] Raw filter criteria from URL:', criteriaParam);
       
       // The 'c' parameter contains encoded JSON criteria
       // Try to decode and parse it
       const decoded = decodeURIComponent(criteriaParam);
+      console.log('[HotOrNot] Decoded filter criteria:', decoded);
       
       // Stash uses a custom encoding format for criteria
       // It can be a JSON array or individual criteria strings
       // Try parsing as JSON first
       try {
         const criteria = JSON.parse(decoded);
-        return Array.isArray(criteria) ? criteria : [criteria];
+        const result = Array.isArray(criteria) ? criteria : [criteria];
+        console.log('[HotOrNot] Parsed criteria as JSON:', result);
+        return result;
       } catch (e) {
         // If not valid JSON, it might be the newer Stash encoding
         // Try parsing as a single criterion object string
@@ -138,10 +144,11 @@
               parsedCriteria.push(criterion);
             }
           } catch (parseErr) {
-            console.warn('[HotOrNot] Could not parse criterion:', criteriaStr);
+            console.warn('[HotOrNot] Could not parse criterion:', criteriaStr, parseErr);
           }
         }
         
+        console.log('[HotOrNot] Parsed criteria from custom format:', parsedCriteria);
         return parsedCriteria;
       }
     } catch (e) {
@@ -614,15 +621,21 @@
     const criteria = parseUrlFilterCriteria();
     const filter = {};
     
+    console.log('[HotOrNot] Converting', criteria.length, 'criteria to performer filter');
+    
     for (const criterion of criteria) {
       const filterPart = convertCriterionToFilter(criterion);
       if (filterPart) {
+        console.log('[HotOrNot] Converted criterion:', criterion, 'to filter part:', filterPart);
         // Merge the filter part into the main filter
         // Handle nested AND/OR logic if needed
         Object.assign(filter, filterPart);
+      } else {
+        console.log('[HotOrNot] Could not convert criterion:', criterion);
       }
     }
     
+    console.log('[HotOrNot] Final performer filter:', filter);
     return filter;
   }
 
@@ -3158,12 +3171,16 @@ function addFloatingButton() {
       cachedUrlFilter = null;
     } else {
       battleType = "performers";
-      // Cache URL filters for performers when modal opens
+      // Always refresh URL filters when modal opens to capture current state
+      // This ensures we get the latest filters from the URL, including any changes
+      // made since the last location event or page load
       cachedUrlFilter = getUrlPerformerFilter();
       
       // Log cached filter for debugging
       if (cachedUrlFilter && Object.keys(cachedUrlFilter).length > 0) {
         console.log('[HotOrNot] Using URL filters for performers:', cachedUrlFilter);
+      } else {
+        console.log('[HotOrNot] No URL filters detected');
       }
     }
     
@@ -3318,6 +3335,33 @@ function addFloatingButton() {
       childList: true,
       subtree: true,
     });
+    
+    // Listen for location changes to update cached filters
+    // This ensures filters are always up-to-date when users navigate or change filters
+    if (typeof PluginApi !== 'undefined' && PluginApi.Event && PluginApi.Event.addEventListener) {
+      PluginApi.Event.addEventListener("stash:location", (e) => {
+        console.log("[HotOrNot] Page changed:", e.detail.data.location.pathname);
+        
+        // Update cached filter when on performers page
+        const path = e.detail.data.location.pathname;
+        if (path === '/performers' || path === '/performers/') {
+          // Parse current filters from URL
+          const newFilter = getUrlPerformerFilter();
+          
+          // Only update cache if modal is not currently open
+          // (if modal is open, it should continue using the filters it was opened with)
+          const modalOpen = document.getElementById("hon-modal") !== null;
+          if (!modalOpen) {
+            cachedUrlFilter = newFilter;
+            if (newFilter && Object.keys(newFilter).length > 0) {
+              console.log('[HotOrNot] Updated cached filters:', newFilter);
+            } else {
+              console.log('[HotOrNot] Cleared cached filters (no filters active)');
+            }
+          }
+        }
+      });
+    }
   }
 
   if (document.readyState === "loading") {
