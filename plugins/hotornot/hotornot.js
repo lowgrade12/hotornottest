@@ -814,12 +814,22 @@ async function fetchSceneCount() {
     let freshLoserObj = loserObj;
     
     if (battleType === "performers") {
+      // Fetch both performers in parallel for better performance
+      const fetchPromises = [];
       if (winnerObj && winnerId) {
-        freshWinnerObj = await fetchPerformerById(winnerId);
+        fetchPromises.push(fetchPerformerById(winnerId));
+      } else {
+        fetchPromises.push(Promise.resolve(null));
       }
       if (loserObj && loserId) {
-        freshLoserObj = await fetchPerformerById(loserId);
+        fetchPromises.push(fetchPerformerById(loserId));
+      } else {
+        fetchPromises.push(Promise.resolve(null));
       }
+      
+      const [fetchedWinner, fetchedLoser] = await Promise.all(fetchPromises);
+      freshWinnerObj = fetchedWinner || winnerObj;
+      freshLoserObj = fetchedLoser || loserObj;
     }
     
     // Parse match counts from custom fields (only for performers)
@@ -1002,9 +1012,13 @@ async function fetchPerformerCount(performerFilter = {}) {
   /**
    * Fetch the latest performer data by ID to get current stats
    * @param {string} performerId - ID of the performer to fetch
-   * @returns {Object} Performer object with latest data from database
+   * @returns {Object|null} Performer object with latest data from database, or null if not found
    */
   async function fetchPerformerById(performerId) {
+    if (!performerId) {
+      return null;
+    }
+    
     const performerQuery = `
       query FindPerformer($id: ID!) {
         findPerformer(id: $id) {
@@ -1013,8 +1027,13 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
     `;
     
-    const result = await graphqlQuery(performerQuery, { id: performerId });
-    return result.findPerformer;
+    try {
+      const result = await graphqlQuery(performerQuery, { id: performerId });
+      return result.findPerformer || null;
+    } catch (error) {
+      console.error(`[HotOrNot] Error fetching performer ${performerId}:`, error);
+      return null;
+    }
   }
 
   /**
@@ -2284,13 +2303,18 @@ async function fetchPerformerCount(performerFilter = {}) {
           // Set their rating to just above the scene they beat
           const finalRating = Math.min(100, loserRating + 1);
           
-          // Fetch latest performer data to get current stats before updating
-          const freshFallingPerformer = battleType === "performers" 
-            ? await fetchPerformerById(gauntletFallingItem.id)
-            : gauntletFallingItem;
-          const freshLoserPerformer = battleType === "performers" 
-            ? await fetchPerformerById(loserId)
-            : loserItem;
+          // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
+          let freshFallingPerformer = gauntletFallingItem;
+          let freshLoserPerformer = loserItem;
+          
+          if (battleType === "performers") {
+            const [fetchedFalling, fetchedLoser] = await Promise.all([
+              fetchPerformerById(gauntletFallingItem.id),
+              fetchPerformerById(loserId)
+            ]);
+            freshFallingPerformer = fetchedFalling || gauntletFallingItem;
+            freshLoserPerformer = fetchedLoser || loserItem;
+          }
           
           // Track this as a win for the falling performer
           updateItemRating(gauntletFallingItem.id, finalRating, freshFallingPerformer, true);
@@ -2315,13 +2339,18 @@ async function fetchPerformerCount(performerFilter = {}) {
           // Falling scene lost again - keep falling
           gauntletDefeated.push(winnerId);
           
-          // Fetch latest performer data to get current stats before updating
-          const freshFallingPerformer = battleType === "performers" 
-            ? await fetchPerformerById(gauntletFallingItem.id)
-            : gauntletFallingItem;
-          const freshWinnerPerformer = battleType === "performers" 
-            ? await fetchPerformerById(winnerId)
-            : winnerItem;
+          // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
+          let freshFallingPerformer = gauntletFallingItem;
+          let freshWinnerPerformer = winnerItem;
+          
+          if (battleType === "performers") {
+            const [fetchedFalling, fetchedWinner] = await Promise.all([
+              fetchPerformerById(gauntletFallingItem.id),
+              fetchPerformerById(winnerId)
+            ]);
+            freshFallingPerformer = fetchedFalling || gauntletFallingItem;
+            freshWinnerPerformer = fetchedWinner || winnerItem;
+          }
           
           // Track stats for both participants
           // Track loss for the falling performer
