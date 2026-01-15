@@ -270,17 +270,33 @@
         break;
         
       case 'gender':
-        // Gender filter (already handled by our default, but can be overridden)
+        // Gender filter
         // Extract simple value from potential nested object (e.g., { "value": "FEMALE" } -> "FEMALE")
         if (value) {
           const genderValue = extractSimpleValue(value);
           if (genderValue) {
-            return {
-              gender: {
-                value: genderValue,
-                modifier: modifier || 'EQUALS'
-              }
-            };
+            const effectiveModifier = modifier || 'EQUALS';
+            // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+            // Use value for single-value modifiers (EQUALS, NOT_EQUALS)
+            const useValueList = ['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL'].includes(effectiveModifier);
+            
+            if (useValueList) {
+              // Ensure genderValue is an array
+              const genderArray = Array.isArray(genderValue) ? genderValue : [genderValue];
+              return {
+                gender: {
+                  value_list: genderArray,
+                  modifier: effectiveModifier
+                }
+              };
+            } else {
+              return {
+                gender: {
+                  value: genderValue,
+                  modifier: effectiveModifier
+                }
+              };
+            }
           }
         }
         break;
@@ -1566,7 +1582,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Exclude male performers (unless URL filter specifies a gender)
     if (!filter.gender) {
       filter.gender = {
-        value: "MALE",
+        value_list: ["MALE"],
         modifier: "EXCLUDES"
       };
     }
