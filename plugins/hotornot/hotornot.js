@@ -99,67 +99,72 @@
   function parseUrlFilterCriteria() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const criteriaParam = urlParams.get('c');
+      // Use getAll() to support multiple filter criteria (multiple c= parameters)
+      const criteriaParams = urlParams.getAll('c');
       
-      if (!criteriaParam) {
+      if (!criteriaParams || criteriaParams.length === 0) {
         console.log('[HotOrNot] No filter criteria found in URL (no "c" parameter)');
         return [];
       }
       
-      console.log('[HotOrNot] Raw filter criteria from URL:', criteriaParam);
+      console.log(`[HotOrNot] Found ${criteriaParams.length} filter parameter(s) in URL:`, criteriaParams);
       
-      // The 'c' parameter contains encoded JSON criteria
-      // Try to decode and parse it
-      const decoded = decodeURIComponent(criteriaParam);
-      console.log('[HotOrNot] Decoded filter criteria:', decoded);
+      const allParsedCriteria = [];
       
-      // Stash uses a custom encoding format for criteria
-      // It can be a JSON array or individual criteria strings
-      // Try parsing as JSON first
-      try {
-        const criteria = JSON.parse(decoded);
-        const result = Array.isArray(criteria) ? criteria : [criteria];
-        console.log('[HotOrNot] Parsed criteria as JSON:', result);
-        return result;
-      } catch (e) {
-        // If not valid JSON, it might be the newer Stash encoding
-        // Try parsing as a single criterion object string
-        // Format: {"type":"tags","value":{"items":["id1","id2"],"depth":0},"modifier":"INCLUDES"}
+      // Parse each criterion parameter separately
+      for (const criteriaParam of criteriaParams) {
+        // The 'c' parameter contains encoded JSON criteria
+        // Try to decode and parse it
+        const decoded = decodeURIComponent(criteriaParam);
+        console.log('[HotOrNot] Decoded filter criteria:', decoded);
         
-        // Multiple criteria are separated - split by },{ or ),( pattern (without lookbehind for compatibility)
-        // Stash may use parentheses instead of curly braces in some encoding formats
-        // Replace },{ or ),( with a unique delimiter, then split
-        const delimiter = '|||SPLIT|||';
-        // Handle both curly braces and parentheses as delimiters between criteria
-        let withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
-        withDelimiter = withDelimiter.replace(/\)\s*,?\s*\(/g, ')' + delimiter + '(');
-        const criteriaStrings = withDelimiter.split(delimiter);
-        const parsedCriteria = [];
-        
-        for (const criteriaStr of criteriaStrings) {
-          try {
-            // Stash may encode criteria with parentheses instead of curly braces
-            // Convert ALL parentheses to curly braces for JSON parsing (including nested ones)
-            // NOTE: This is safe because we only reach this code if standard JSON.parse failed
-            // at line 115, meaning the input is not valid JSON. If it had properly quoted
-            // strings with parentheses, it would have parsed successfully in the first attempt.
-            let normalized = criteriaStr.trim();
-            // Replace all opening parentheses with curly braces
-            normalized = normalized.replace(/\(/g, '{');
-            // Replace all closing parentheses with curly braces
-            normalized = normalized.replace(/\)/g, '}');
-            const criterion = JSON.parse(normalized);
-            if (criterion && criterion.type) {
-              parsedCriteria.push(criterion);
+        // Stash uses a custom encoding format for criteria
+        // It can be a JSON array or individual criteria strings
+        // Try parsing as JSON first
+        try {
+          const criteria = JSON.parse(decoded);
+          const result = Array.isArray(criteria) ? criteria : [criteria];
+          console.log('[HotOrNot] Parsed criteria as JSON:', result);
+          allParsedCriteria.push(...result);
+        } catch (e) {
+          // If not valid JSON, it might be the newer Stash encoding
+          // Try parsing as a single criterion object string
+          // Format: {"type":"tags","value":{"items":["id1","id2"],"depth":0},"modifier":"INCLUDES"}
+          
+          // Multiple criteria are separated - split by },{ or ),( pattern (without lookbehind for compatibility)
+          // Stash may use parentheses instead of curly braces in some encoding formats
+          // Replace },{ or ),( with a unique delimiter, then split
+          const delimiter = '|||SPLIT|||';
+          // Handle both curly braces and parentheses as delimiters between criteria
+          let withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
+          withDelimiter = withDelimiter.replace(/\)\s*,?\s*\(/g, ')' + delimiter + '(');
+          const criteriaStrings = withDelimiter.split(delimiter);
+          
+          for (const criteriaStr of criteriaStrings) {
+            try {
+              // Stash may encode criteria with parentheses instead of curly braces
+              // Convert ALL parentheses to curly braces for JSON parsing (including nested ones)
+              // NOTE: This is safe because we only reach this code if standard JSON.parse failed
+              // at line 125, meaning the input is not valid JSON. If it had properly quoted
+              // strings with parentheses, it would have parsed successfully in the first attempt.
+              let normalized = criteriaStr.trim();
+              // Replace all opening parentheses with curly braces
+              normalized = normalized.replace(/\(/g, '{');
+              // Replace all closing parentheses with curly braces
+              normalized = normalized.replace(/\)/g, '}');
+              const criterion = JSON.parse(normalized);
+              if (criterion && criterion.type) {
+                allParsedCriteria.push(criterion);
+              }
+            } catch (parseErr) {
+              console.warn('[HotOrNot] Could not parse criterion:', criteriaStr, parseErr);
             }
-          } catch (parseErr) {
-            console.warn('[HotOrNot] Could not parse criterion:', criteriaStr, parseErr);
           }
         }
-        
-        console.log('[HotOrNot] Parsed criteria from custom format:', parsedCriteria);
-        return parsedCriteria;
       }
+      
+      console.log('[HotOrNot] Total parsed criteria:', allParsedCriteria);
+      return allParsedCriteria;
     } catch (e) {
       console.warn('[HotOrNot] Error parsing URL filter criteria:', e);
       return [];
