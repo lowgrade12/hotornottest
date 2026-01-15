@@ -883,7 +883,11 @@ async function fetchSceneCount() {
     
     // Determine which participants should have stats tracked
     const winnerRank = winnerId === currentPair.left?.id ? currentRanks.left : currentRanks.right;
-    const shouldTrackWinner = battleType === "performers" && isActiveParticipant(winnerId, winnerRank);
+    
+    // In champion/gauntlet mode with no champion yet (first match), the winner will become champion
+    // so they should get full stats tracked
+    const isFirstMatchInGauntletMode = (currentMode === "gauntlet" || currentMode === "champion") && !gauntletChampion;
+    const shouldTrackWinner = battleType === "performers" && (isActiveParticipant(winnerId, winnerRank) || isFirstMatchInGauntletMode);
     const shouldTrackLoser = battleType === "performers" && isActiveParticipant(loserId, loserRank);
     
     // Update items in Stash
