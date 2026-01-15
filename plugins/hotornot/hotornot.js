@@ -15,6 +15,11 @@
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
 
+  // Filter constants
+  // Protected filter keys that should never be overwritten by page filters
+  // These are critical defaults that ensure the plugin works correctly
+  const PROTECTED_FILTER_KEYS = new Set(['gender', 'NOT']);
+
   // ============================================
   // GRAPHQL QUERIES
   // ============================================
@@ -977,6 +982,242 @@ async function fetchSceneCount() {
 
 
   // ============================================
+  // FILTER READING UTILITIES
+  // ============================================
+
+  /**
+   * Parse Stash's custom filter serialization format from URL parameter
+   * Format: ("key":"value","key2":"value2") - uses colons and parentheses instead of standard JSON
+   * @param {string} paramValue - The raw 'c' parameter value from URL
+   * @returns {Object|null} Parsed filter object or null if parsing fails
+   */
+  function parseStashFilterParam(paramValue) {
+    if (!paramValue) return null;
+    
+    try {
+      // Decode URI component first
+      const decoded = decodeURIComponent(paramValue);
+      
+      // Convert Stash's custom format to valid JSON
+      // Replace parentheses with braces, keeping quotes intact
+      let jsonStr = decoded
+        .replace(/\(/g, '{')
+        .replace(/\)/g, '}');
+      
+      // Parse the resulting JSON
+      const parsed = JSON.parse(jsonStr);
+      return parsed;
+    } catch (e) {
+      console.warn('[HotOrNot] Failed to parse filter parameter:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Read active filters from the current page URL
+   * Stash stores filter state in the 'c' URL parameter
+   * @returns {Object|null} Filter criteria object or null if no filters active
+   */
+  function readFiltersFromURL() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const criteriaParam = params.get('c');
+      
+      if (!criteriaParam) {
+        console.log('[HotOrNot] No active filters found in URL');
+        return null;
+      }
+      
+      const parsed = parseStashFilterParam(criteriaParam);
+      if (parsed) {
+        console.log('[HotOrNot] Active filters from URL:', parsed);
+      }
+      
+      return parsed;
+    } catch (e) {
+      console.warn('[HotOrNot] Error reading filters from URL:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Read active filter chips from the DOM (visual confirmation)
+   * Scrapes the filter bar UI elements to extract human-readable filter information
+   * @returns {Array<string>} Array of filter descriptions (e.g., ["Created At is greater than 2026-01-12"])
+   */
+  function readFiltersFromDOM() {
+    try {
+      // Look for filter chips in the Stash UI
+      // Using more specific selector to avoid matching unintended elements
+      const filterContainer = document.querySelector('.filter-item-list');
+      if (!filterContainer) {
+        console.log('[HotOrNot] No filter container found in DOM');
+        return [];
+      }
+      
+      // Get buttons within the filter container
+      const filterChips = filterContainer.querySelectorAll('button.btn-secondary');
+      
+      if (filterChips.length === 0) {
+        console.log('[HotOrNot] No filter chips found in DOM');
+        return [];
+      }
+      
+      const filters = Array.from(filterChips)
+        .map(chip => chip.textContent?.trim())
+        .filter(text => text && text.length > 0);
+      
+      if (filters.length > 0) {
+        console.log('[HotOrNot] Active filters from DOM:', filters);
+      }
+      
+      return filters;
+    } catch (e) {
+      console.warn('[HotOrNot] Error reading filters from DOM:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Get currently active filters using a hybrid approach
+   * Prioritizes URL parsing (programmatic) with DOM fallback (visual confirmation)
+   * @returns {Object} Object containing parsed filters and visual descriptions
+   */
+  function getActiveFilters() {
+    const urlFilters = readFiltersFromURL();
+    const domFilters = readFiltersFromDOM();
+    
+    return {
+      criteria: urlFilters,           // Parsed filter criteria from URL
+      descriptions: domFilters,        // Human-readable filter descriptions from DOM
+      hasFilters: urlFilters !== null || domFilters.length > 0
+    };
+  }
+
+  /**
+   * Get the default performer filters used by HotOrNot
+   * @returns {Object} Default GraphQL performer filter object
+   */
+  function getDefaultPerformerFilters() {
+    return {
+      gender: {
+        value: "MALE",
+        modifier: "EXCLUDES"
+      },
+      NOT: {
+        is_missing: "image"
+      }
+    };
+  }
+
+  /**
+   * Convert active page filters to GraphQL performer filter format
+   * This allows HotOrNot to respect user's current filter selection
+   * @param {Object} activeFilters - Filter criteria from getActiveFilters()
+   * @returns {Object} GraphQL-compatible performer filter object (only page-specific filters, no defaults)
+   */
+  function convertToPerformerFilter(activeFilters) {
+    // Return empty object if no active filters
+    if (!activeFilters || !activeFilters.criteria) {
+      return {};
+    }
+    
+    const filter = {};
+    
+    // Add active filters from the page
+    // Note: Stash's filter format can be complex with nested criteria
+    const criteria = activeFilters.criteria;
+    
+    // Handle different filter types
+    try {
+      // Handle created_at filter (timestamp comparison)
+      if (criteria.type === 'created_at' && criteria.value?.value) {
+        filter.created_at = {
+          value: criteria.value.value,
+          modifier: criteria.modifier || 'EQUALS'
+        };
+        console.log('[HotOrNot] Applied created_at filter:', filter.created_at);
+      }
+      
+      // Handle rating filter (numeric comparison)
+      // Note: Use parseFloat to support decimal ratings (e.g., 87.5)
+      if (criteria.type === 'rating100' && criteria.value?.value !== undefined) {
+        const ratingValue = parseFloat(criteria.value.value);
+        // Validate rating is a number and within valid range (0-100)
+        if (!isNaN(ratingValue) && ratingValue >= 0 && ratingValue <= 100) {
+          filter.rating100 = {
+            value: ratingValue,
+            modifier: criteria.modifier || 'EQUALS'
+          };
+          console.log('[HotOrNot] Applied rating100 filter:', filter.rating100);
+        } else {
+          console.warn('[HotOrNot] Invalid rating value (must be 0-100):', ratingValue);
+        }
+      }
+      
+      // Handle birthdate filter
+      if (criteria.type === 'birthdate' && criteria.value?.value) {
+        filter.birthdate = {
+          value: criteria.value.value,
+          modifier: criteria.modifier || 'EQUALS'
+        };
+        console.log('[HotOrNot] Applied birthdate filter:', filter.birthdate);
+      }
+      
+      // Handle tag filter (includes/excludes tags)
+      if (criteria.type === 'tags' && criteria.value) {
+        // Tags can be an array or single value
+        filter.tags = {
+          value: Array.isArray(criteria.value) ? criteria.value : [criteria.value],
+          modifier: criteria.modifier || 'INCLUDES_ALL',
+          depth: criteria.depth || 0
+        };
+        console.log('[HotOrNot] Applied tags filter:', filter.tags);
+      }
+      
+      // Handle studio filter
+      if (criteria.type === 'studios' && criteria.value) {
+        filter.studios = {
+          value: Array.isArray(criteria.value) ? criteria.value : [criteria.value],
+          modifier: criteria.modifier || 'INCLUDES'
+        };
+        console.log('[HotOrNot] Applied studios filter:', filter.studios);
+      }
+      
+      // Handle ethnicity filter
+      if (criteria.type === 'ethnicity' && criteria.value?.value) {
+        filter.ethnicity = {
+          value: criteria.value.value,
+          modifier: criteria.modifier || 'EQUALS'
+        };
+        console.log('[HotOrNot] Applied ethnicity filter:', filter.ethnicity);
+      }
+      
+      // Handle country filter
+      if (criteria.type === 'country' && criteria.value?.value) {
+        filter.country = {
+          value: criteria.value.value,
+          modifier: criteria.modifier || 'EQUALS'
+        };
+        console.log('[HotOrNot] Applied country filter:', filter.country);
+      }
+      
+      // List of supported filter types for validation
+      const supportedTypes = ['created_at', 'rating100', 'birthdate', 'tags', 'studios', 'ethnicity', 'country'];
+      
+      // Log if filter type was not recognized
+      if (!supportedTypes.includes(criteria.type)) {
+        console.log('[HotOrNot] Unsupported filter type:', criteria.type);
+      }
+      
+    } catch (e) {
+      console.warn('[HotOrNot] Error converting filter criteria:', e);
+    }
+    
+    return filter;
+  }
+
+  // ============================================
   // PERFORMER FUNCTIONS
   // ============================================
 
@@ -992,17 +1233,33 @@ async function fetchPerformerCount(performerFilter = {}) {
     return countResult.findPerformers.count;
   }
 
-  function getPerformerFilter() {
-    const filter = {};
-    // Exclude male performers
-    filter.gender = {
-      value: "MALE",
-      modifier: "EXCLUDES"
-    };
-    // Exclude performers without images by filtering out those where image is missing
-    filter.NOT = {
-      is_missing: "image"
-    };
+  function getPerformerFilter(respectPageFilters = true) {
+    // Start with default filters
+    const filter = getDefaultPerformerFilters();
+    
+    // Optionally incorporate active page filters
+    if (respectPageFilters) {
+      try {
+        const activeFilters = getActiveFilters();
+        if (activeFilters.hasFilters) {
+          console.log('[HotOrNot] Respecting active page filters:', activeFilters.descriptions);
+          const pageFilters = convertToPerformerFilter(activeFilters);
+          
+          // Merge page-specific filters with defaults
+          // This preserves our critical defaults (exclude males, exclude without images)
+          // while adding any additional page filters
+          Object.keys(pageFilters).forEach(key => {
+            // Don't overwrite protected filter keys (gender, NOT)
+            if (!PROTECTED_FILTER_KEYS.has(key)) {
+              filter[key] = pageFilters[key];
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('[HotOrNot] Failed to read page filters, using defaults:', e);
+      }
+    }
+    
     return filter;
   }
 
@@ -2043,6 +2300,15 @@ async function fetchPerformerCount(performerFilter = {}) {
     const itemType = battleType === "performers" ? "performers" : (battleType === "images" ? "images" : "scenes");
     const itemTypeSingular = battleType === "performers" ? "performer" : (battleType === "images" ? "image" : "scene");
     
+    // Check for active filters
+    const activeFilters = getActiveFilters();
+    const filterBadgeHTML = activeFilters.hasFilters && activeFilters.descriptions.length > 0 ? `
+      <div class="hon-active-filters">
+        <span class="hon-filter-icon">🔍</span>
+        <span class="hon-filter-text">Active Filters: ${activeFilters.descriptions.join(', ')}</span>
+      </div>
+    ` : '';
+    
     // For images, hide mode selection (only use Swiss mode)
     const showModeToggle = battleType !== "images";
     const modeToggleHTML = showModeToggle ? `
@@ -2070,6 +2336,7 @@ async function fetchPerformerCount(performerFilter = {}) {
         <div class="hon-header">
           <h1 class="hon-title">🔥 HotOrNot</h1>
           <p class="hon-subtitle">Compare ${itemType} head-to-head to build your rankings</p>
+          ${filterBadgeHTML}
           ${modeToggleHTML}
         </div>
 
