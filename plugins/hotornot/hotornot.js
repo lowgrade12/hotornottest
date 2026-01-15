@@ -115,8 +115,11 @@
         // Try parsing as a single criterion object string
         // Format: {"type":"tags","value":{"items":["id1","id2"],"depth":0},"modifier":"INCLUDES"}
         
-        // Multiple criteria are separated by URL-encoded objects
-        const criteriaStrings = decoded.split(/(?<=\})\s*,?\s*(?=\{)/);
+        // Multiple criteria are separated - split by },{ pattern (without lookbehind for compatibility)
+        // Replace },{ with a unique delimiter, then split
+        const delimiter = '|||SPLIT|||';
+        const withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
+        const criteriaStrings = withDelimiter.split(delimiter);
         const parsedCriteria = [];
         
         for (const criteriaStr of criteriaStrings) {
@@ -136,6 +139,20 @@
       console.warn('[HotOrNot] Error parsing URL filter criteria:', e);
       return [];
     }
+  }
+
+  /**
+   * Safely parse an integer value, returning a default if parsing fails
+   * @param {*} value - Value to parse
+   * @param {number} defaultValue - Default value if parsing fails (default: 0)
+   * @returns {number} Parsed integer or default value
+   */
+  function safeParseInt(value, defaultValue = 0) {
+    if (value === undefined || value === null) {
+      return defaultValue;
+    }
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
   }
 
   /**
@@ -206,7 +223,7 @@
         if (value !== undefined && value !== null) {
           return {
             rating100: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'GREATER_THAN'
             }
           };
@@ -218,7 +235,7 @@
         if (value !== undefined && value !== null) {
           return {
             age: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'EQUALS'
             }
           };
@@ -278,7 +295,7 @@
         if (value !== undefined && value !== null) {
           return {
             scene_count: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'GREATER_THAN'
             }
           };
@@ -290,7 +307,7 @@
         if (value !== undefined && value !== null) {
           return {
             image_count: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'GREATER_THAN'
             }
           };
@@ -302,7 +319,7 @@
         if (value !== undefined && value !== null) {
           return {
             gallery_count: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'GREATER_THAN'
             }
           };
@@ -314,7 +331,7 @@
         if (value !== undefined && value !== null) {
           return {
             o_counter: {
-              value: parseInt(value, 10) || 0,
+              value: safeParseInt(value, 0),
               modifier: modifier || 'GREATER_THAN'
             }
           };
@@ -324,20 +341,21 @@
       case 'stash_id':
       case 'stash_id_endpoint':
         // Stash ID filter - performer has a stash ID at a specific endpoint
-        if (value && value.stash_id) {
-          return {
-            stash_id_endpoint: {
-              stash_id: value.stash_id,
-              modifier: modifier || 'EQUALS'
-            }
-          };
-        } else if (value && value.endpoint) {
-          return {
-            stash_id_endpoint: {
-              endpoint: value.endpoint,
-              modifier: modifier || 'NOT_NULL'
-            }
-          };
+        // The structure depends on what's in the value object
+        if (value && typeof value === 'object') {
+          const stashIdFilter = {};
+          if (value.stash_id) {
+            stashIdFilter.stash_id = value.stash_id;
+          }
+          if (value.endpoint) {
+            stashIdFilter.endpoint = value.endpoint;
+          }
+          if (Object.keys(stashIdFilter).length > 0) {
+            stashIdFilter.modifier = modifier || 'NOT_NULL';
+            return {
+              stash_id_endpoint: stashIdFilter
+            };
+          }
         }
         break;
         
