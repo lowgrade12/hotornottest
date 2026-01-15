@@ -1070,9 +1070,55 @@ async function fetchPerformerCount(performerFilter = {}) {
         try {
           // Stash encodes criteria as JSON with ( ) instead of { }
           // Decode it back to JSON format
+          // This replacement is safe because Stash consistently uses this encoding
+          // and doesn't allow ( ) in criterion JSON strings
           let jsonString = decodeURIComponent(encodedCriterion);
-          jsonString = jsonString.replace(/\(/g, '{').replace(/\)/g, '}');
-          const criterion = JSON.parse(jsonString);
+          
+          // Convert Stash's ( ) encoding back to standard JSON { }
+          // We only replace these at the structural level (not in quoted strings)
+          let depth = 0;
+          let inString = false;
+          let escape = false;
+          const chars = [];
+          
+          for (let i = 0; i < jsonString.length; i++) {
+            const char = jsonString[i];
+            
+            if (escape) {
+              chars.push(char);
+              escape = false;
+              continue;
+            }
+            
+            if (char === '\\') {
+              escape = true;
+              chars.push(char);
+              continue;
+            }
+            
+            if (char === '"') {
+              inString = !inString;
+              chars.push(char);
+              continue;
+            }
+            
+            if (!inString) {
+              if (char === '(') {
+                chars.push('{');
+                depth++;
+              } else if (char === ')') {
+                chars.push('}');
+                depth--;
+              } else {
+                chars.push(char);
+              }
+            } else {
+              chars.push(char);
+            }
+          }
+          
+          const decodedJson = chars.join('');
+          const criterion = JSON.parse(decodedJson);
           criteria.push(criterion);
         } catch (err) {
           console.warn('[HotOrNot] Failed to parse criterion from URL:', encodedCriterion, err);
@@ -1093,6 +1139,9 @@ async function fetchPerformerCount(performerFilter = {}) {
    * Convert Stash's criteria array to GraphQL PerformerFilterType format.
    * Each criterion in the array has a type and value that needs to be converted.
    * 
+   * NOTE: This is a simplified conversion that works for most common criterion types.
+   * Some criterion types may require special handling that isn't implemented here.
+   * 
    * @param {Array} criteria - Array of Criterion objects from Stash
    * @returns {Object} Converted filter object
    */
@@ -1106,10 +1155,21 @@ async function fetchPerformerCount(performerFilter = {}) {
       
       try {
         // Each criterion type may have a different structure
-        // Common pattern: criterion has a 'value' property that contains the filter data
-        if (criterion.value !== undefined && criterion.value !== null) {
-          filter[criterion.type] = criterion.value;
+        // For most types, the 'value' property contains the filter data in GraphQL-compatible format
+        // Some special cases to handle:
+        
+        // Skip if no value
+        if (criterion.value === undefined || criterion.value === null) {
+          console.warn(`[HotOrNot] Criterion "${criterion.type}" has no value, skipping`);
+          return;
         }
+        
+        // For most criteria, the value is already in the right format for GraphQL
+        // This works because Stash's criterion objects store their values in a format
+        // that's compatible with the GraphQL API
+        filter[criterion.type] = criterion.value;
+        
+        console.log(`[HotOrNot] Converted criterion "${criterion.type}":`, criterion.value);
       } catch (err) {
         console.warn(`[HotOrNot] Failed to convert criterion type "${criterion.type}":`, err);
       }
