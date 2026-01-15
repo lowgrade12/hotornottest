@@ -17,7 +17,8 @@
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
   // GraphQL filter modifier constants
-  // Array-based modifiers require value_list field for enum inputs like GenderCriterionInput
+  // Array-based modifiers require value_list field for enum-based criterion inputs
+  // (e.g., GenderCriterionInput). Non-enum filters like StringCriterionInput use 'value' field.
   const ARRAY_BASED_MODIFIERS = ['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL'];
 
   // ============================================
