@@ -115,16 +115,25 @@
         // Try parsing as a single criterion object string
         // Format: {"type":"tags","value":{"items":["id1","id2"],"depth":0},"modifier":"INCLUDES"}
         
-        // Multiple criteria are separated - split by },{ pattern (without lookbehind for compatibility)
-        // Replace },{ with a unique delimiter, then split
+        // Multiple criteria are separated - split by },{ or ),( pattern (without lookbehind for compatibility)
+        // Stash may use parentheses instead of curly braces in some encoding formats
+        // Replace },{ or ),( with a unique delimiter, then split
         const delimiter = '|||SPLIT|||';
-        const withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
+        // Handle both curly braces and parentheses as delimiters between criteria
+        let withDelimiter = decoded.replace(/\}\s*,?\s*\{/g, '}' + delimiter + '{');
+        withDelimiter = withDelimiter.replace(/\)\s*,?\s*\(/g, ')' + delimiter + '(');
         const criteriaStrings = withDelimiter.split(delimiter);
         const parsedCriteria = [];
         
         for (const criteriaStr of criteriaStrings) {
           try {
-            const criterion = JSON.parse(criteriaStr.trim());
+            // Stash may encode criteria with parentheses instead of curly braces
+            // Convert parentheses to curly braces for JSON parsing
+            let normalized = criteriaStr.trim();
+            if (normalized.startsWith('(') && normalized.endsWith(')')) {
+              normalized = '{' + normalized.slice(1, -1) + '}';
+            }
+            const criterion = JSON.parse(normalized);
             if (criterion && criterion.type) {
               parsedCriteria.push(criterion);
             }
