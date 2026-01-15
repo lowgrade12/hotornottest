@@ -1211,13 +1211,15 @@ async function fetchSceneCount() {
         let ethnicityValue = criteria.value.value;
         // If value is an array, extract the first element
         if (Array.isArray(ethnicityValue)) {
-          ethnicityValue = ethnicityValue[0];
+          ethnicityValue = ethnicityValue.length > 0 ? ethnicityValue[0] : null;
         }
-        filter.ethnicity = {
-          value: ethnicityValue,
-          modifier: criteria.modifier || 'EQUALS'
-        };
-        console.log('[HotOrNot] Applied ethnicity filter:', filter.ethnicity);
+        if (ethnicityValue) {
+          filter.ethnicity = {
+            value: ethnicityValue,
+            modifier: criteria.modifier || 'EQUALS'
+          };
+          console.log('[HotOrNot] Applied ethnicity filter:', filter.ethnicity);
+        }
       }
       
       // Handle country filter
@@ -1226,7 +1228,7 @@ async function fetchSceneCount() {
         let countryValue = criteria.value?.value || criteria.value;
         // If value is an array, extract the first element
         if (Array.isArray(countryValue)) {
-          countryValue = countryValue[0];
+          countryValue = countryValue.length > 0 ? countryValue[0] : null;
         }
         if (countryValue) {
           filter.country = {
@@ -1243,7 +1245,7 @@ async function fetchSceneCount() {
         let genderValue = criteria.value?.value || criteria.value;
         // If value is an array, extract the first element
         if (Array.isArray(genderValue)) {
-          genderValue = genderValue[0];
+          genderValue = genderValue.length > 0 ? genderValue[0] : null;
         }
         if (genderValue) {
           filter.gender = {

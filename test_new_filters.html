@@ -172,7 +172,7 @@
                     let genderValue = criteria.value?.value || criteria.value;
                     // If value is an array, extract the first element
                     if (Array.isArray(genderValue)) {
-                        genderValue = genderValue[0];
+                        genderValue = genderValue.length > 0 ? genderValue[0] : null;
                     }
                     if (genderValue) {
                         filter.gender = {
