@@ -163,7 +163,7 @@
         }
       }
       
-      console.log('[HotOrNot] Parsed criteria from custom format:', allParsedCriteria);
+      console.log('[HotOrNot] Total parsed criteria:', allParsedCriteria);
       return allParsedCriteria;
     } catch (e) {
       console.warn('[HotOrNot] Error parsing URL filter criteria:', e);
