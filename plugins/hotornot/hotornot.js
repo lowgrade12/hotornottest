@@ -145,7 +145,7 @@
               // Stash may encode criteria with parentheses instead of curly braces
               // Convert ALL parentheses to curly braces for JSON parsing (including nested ones)
               // NOTE: This is safe because we only reach this code if standard JSON.parse failed
-              // at line 115, meaning the input is not valid JSON. If it had properly quoted
+              // at line 125, meaning the input is not valid JSON. If it had properly quoted
               // strings with parentheses, it would have parsed successfully in the first attempt.
               let normalized = criteriaStr.trim();
               // Replace all opening parentheses with curly braces
