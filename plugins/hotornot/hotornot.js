@@ -214,6 +214,42 @@
   }
 
   /**
+   * Normalize gender value to valid GraphQL GenderEnum format.
+   * Converts human-readable formats (e.g., "Transgender Female", "transgender female")
+   * to GraphQL enum format (e.g., "TRANSGENDER_FEMALE").
+   * Valid GenderEnum values: MALE, FEMALE, TRANSGENDER_MALE, TRANSGENDER_FEMALE, INTERSEX, NON_BINARY
+   * @param {string} value - Gender value to normalize
+   * @returns {string} Normalized gender value in GraphQL enum format
+   */
+  function normalizeGenderValue(value) {
+    if (!value || typeof value !== 'string') {
+      return value;
+    }
+    
+    // Convert to uppercase and replace spaces with underscores
+    const normalized = value.toUpperCase().replace(/\s+/g, '_');
+    
+    // Validate against known GenderEnum values
+    const validGenders = new Set([
+      'MALE',
+      'FEMALE',
+      'TRANSGENDER_MALE',
+      'TRANSGENDER_FEMALE',
+      'INTERSEX',
+      'NON_BINARY'
+    ]);
+    
+    if (validGenders.has(normalized)) {
+      return normalized;
+    }
+    
+    // If not valid, log a warning and return the original value
+    // This allows the GraphQL API to reject it with a clear error message
+    console.warn(`[HotOrNot] Invalid gender value "${value}" - valid values are: ${Array.from(validGenders).join(', ')}`);
+    return value;
+  }
+
+  /**
    * Create a numeric filter object with support for value2 (BETWEEN modifier)
    * @param {*} value - Value to parse (can be a number or an object with value and value2)
    * @param {string} modifier - The filter modifier (e.g., 'BETWEEN', 'GREATER_THAN')
@@ -288,16 +324,20 @@
             if (useValueList) {
               // Convert genderValue to array format for value_list field
               const genderArray = Array.isArray(genderValue) ? genderValue : [genderValue];
+              // Normalize each gender value to valid GraphQL enum format
+              const normalizedArray = genderArray.map(g => normalizeGenderValue(g));
               return {
                 gender: {
-                  value_list: genderArray,
+                  value_list: normalizedArray,
                   modifier: effectiveModifier
                 }
               };
             } else {
+              // Normalize single gender value to valid GraphQL enum format
+              const normalizedValue = normalizeGenderValue(genderValue);
               return {
                 gender: {
-                  value: genderValue,
+                  value: normalizedValue,
                   modifier: effectiveModifier
                 }
               };
