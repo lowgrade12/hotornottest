@@ -134,11 +134,12 @@
         for (const criteriaStr of criteriaStrings) {
           try {
             // Stash may encode criteria with parentheses instead of curly braces
-            // Convert parentheses to curly braces for JSON parsing
+            // Convert ALL parentheses to curly braces for JSON parsing (including nested ones)
             let normalized = criteriaStr.trim();
-            if (normalized.startsWith('(') && normalized.endsWith(')')) {
-              normalized = '{' + normalized.slice(1, -1) + '}';
-            }
+            // Replace all opening parentheses with curly braces
+            normalized = normalized.replace(/\(/g, '{');
+            // Replace all closing parentheses with curly braces
+            normalized = normalized.replace(/\)/g, '}');
             const criterion = JSON.parse(normalized);
             if (criterion && criterion.type) {
               parsedCriteria.push(criterion);
@@ -275,11 +276,17 @@
       case 'rating100':
         // Rating filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'GREATER_THAN'
+          };
+          // Handle BETWEEN modifier which requires value2
+          // value can be an object like { "value": 20, "value2": 30 }
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            rating100: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            rating100: filterObj
           };
         }
         break;
@@ -287,11 +294,16 @@
       case 'age':
         // Age filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'EQUALS'
+          };
+          // Handle BETWEEN modifier which requires value2
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            age: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'EQUALS'
-            }
+            age: filterObj
           };
         }
         break;
@@ -359,11 +371,16 @@
       case 'scene_count':
         // Scene count filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'GREATER_THAN'
+          };
+          // Handle BETWEEN modifier which requires value2
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            scene_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            scene_count: filterObj
           };
         }
         break;
@@ -371,11 +388,16 @@
       case 'image_count':
         // Image count filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'GREATER_THAN'
+          };
+          // Handle BETWEEN modifier which requires value2
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            image_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            image_count: filterObj
           };
         }
         break;
@@ -383,11 +405,16 @@
       case 'gallery_count':
         // Gallery count filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'GREATER_THAN'
+          };
+          // Handle BETWEEN modifier which requires value2
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            gallery_count: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            gallery_count: filterObj
           };
         }
         break;
@@ -395,11 +422,16 @@
       case 'o_counter':
         // O-counter filter
         if (value !== undefined && value !== null) {
+          const filterObj = {
+            value: safeParseInt(value, 0),
+            modifier: modifier || 'GREATER_THAN'
+          };
+          // Handle BETWEEN modifier which requires value2
+          if (typeof value === 'object' && !Array.isArray(value) && value.value2 !== undefined) {
+            filterObj.value2 = safeParseInt(value.value2, 0);
+          }
           return {
-            o_counter: {
-              value: safeParseInt(value, 0),
-              modifier: modifier || 'GREATER_THAN'
-            }
+            o_counter: filterObj
           };
         }
         break;
