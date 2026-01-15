@@ -16,6 +16,10 @@
   let battleType = "performers"; // HotOrNot is performers-only
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
+  // GraphQL filter modifier constants
+  // Array-based modifiers require value_list field for enum inputs like GenderCriterionInput
+  const ARRAY_BASED_MODIFIERS = ['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL'];
+
   // ============================================
   // GRAPHQL QUERIES
   // ============================================
@@ -278,7 +282,7 @@
             const effectiveModifier = modifier || 'EQUALS';
             // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
             // Use value for single-value modifiers (EQUALS, NOT_EQUALS)
-            const useValueList = ['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL'].includes(effectiveModifier);
+            const useValueList = ARRAY_BASED_MODIFIERS.includes(effectiveModifier);
             
             if (useValueList) {
               // Ensure genderValue is an array
