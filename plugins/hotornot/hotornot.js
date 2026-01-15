@@ -1565,12 +1565,8 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // Exclude performers without images (unless URL filter specifies is_missing)
-    if (!filter.NOT && !filter.is_missing) {
-      filter.NOT = {
-        is_missing: "image"
-      };
-    }
+    // Note: Removed the NOT filter for is_missing as it was causing GraphQL 400 errors
+    // The filter structure `NOT: { is_missing: "image" }` is invalid for the Stash GraphQL API
     
     return filter;
   }
