@@ -16,6 +16,11 @@
   let battleType = "performers"; // HotOrNot is performers-only
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
+  // GraphQL filter modifier constants
+  // Array-based modifiers require value_list field for enum-based criterion inputs
+  // (e.g., GenderCriterionInput). Non-enum filters like StringCriterionInput use 'value' field.
+  const ARRAY_BASED_MODIFIERS = new Set(['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL']);
+
   // ============================================
   // GRAPHQL QUERIES
   // ============================================
@@ -270,17 +275,33 @@
         break;
         
       case 'gender':
-        // Gender filter (already handled by our default, but can be overridden)
+        // Gender filter
         // Extract simple value from potential nested object (e.g., { "value": "FEMALE" } -> "FEMALE")
         if (value) {
           const genderValue = extractSimpleValue(value);
           if (genderValue) {
-            return {
-              gender: {
-                value: genderValue,
-                modifier: modifier || 'EQUALS'
-              }
-            };
+            const effectiveModifier = modifier || 'EQUALS';
+            // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+            // Use value for single-value modifiers (EQUALS, NOT_EQUALS)
+            const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
+            
+            if (useValueList) {
+              // Convert genderValue to array format for value_list field
+              const genderArray = Array.isArray(genderValue) ? genderValue : [genderValue];
+              return {
+                gender: {
+                  value_list: genderArray,
+                  modifier: effectiveModifier
+                }
+              };
+            } else {
+              return {
+                gender: {
+                  value: genderValue,
+                  modifier: effectiveModifier
+                }
+              };
+            }
           }
         }
         break;
@@ -1566,7 +1587,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Exclude male performers (unless URL filter specifies a gender)
     if (!filter.gender) {
       filter.gender = {
-        value: "MALE",
+        value_list: ["MALE"],
         modifier: "EXCLUDES"
       };
     }
