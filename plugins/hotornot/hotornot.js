@@ -1807,12 +1807,6 @@ async function fetchPerformerCount(performerFilter = {}) {
   async function fetchSwissPairPerformers() {
     const performerFilter = getPerformerFilter();
     
-    // For large performer pools (>1000), use sampling for performance
-    // For smaller pools, still get all for accurate ranking
-    const totalPerformers = await fetchPerformerCount(performerFilter);
-    const useSampling = totalPerformers > 1000;
-    const sampleSize = useSampling ? Math.min(500, totalPerformers) : totalPerformers;
-    
     const performersQuery = `
       query FindPerformersByRating($performer_filter: PerformerFilterType, $filter: FindFilterType) {
         findPerformers(performer_filter: $performer_filter, filter: $filter) {
@@ -1823,13 +1817,13 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
     `;
 
-    // Get performers - either all or a random sample
+    // Get all performers for accurate ranking
     const result = await graphqlQuery(performersQuery, {
       performer_filter: performerFilter,
       filter: {
-        per_page: sampleSize,
-        sort: useSampling ? "random" : "rating",
-        direction: useSampling ? undefined : "DESC"
+        per_page: -1,
+        sort: "rating",
+        direction: "DESC"
       }
     });
 
@@ -1916,8 +1910,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     return { 
       performers: [performer1, performer2], 
-      // When using sampling, ranks are not meaningful (don't represent true position)
-      ranks: useSampling ? [null, null] : [randomIndex + 1, performer2Index + 1] 
+      ranks: [randomIndex + 1, performer2Index + 1] 
     };
   }
 
@@ -2678,6 +2671,197 @@ async function fetchPerformerCount(performerFilter = {}) {
   // Images now use Swiss mode exclusively for optimal performance.
   // Gauntlet and Champion modes are only available for performers.
 
+  // ============================================
+  // PERFORMER STATS MODAL
+  // ============================================
+
+  /**
+   * Fetch all performers with stats and ratings
+   */
+  async function fetchAllPerformerStats() {
+    const performerFilter = getPerformerFilter();
+    const performersQuery = `
+      query FindAllPerformers($performer_filter: PerformerFilterType, $filter: FindFilterType) {
+        findPerformers(performer_filter: $performer_filter, filter: $filter) {
+          performers {
+            ${PERFORMER_FRAGMENT}
+          }
+        }
+      }
+    `;
+
+    const result = await graphqlQuery(performersQuery, {
+      performer_filter: performerFilter,
+      filter: {
+        per_page: -1,
+        sort: "rating",
+        direction: "DESC"
+      }
+    });
+
+    return result.findPerformers.performers || [];
+  }
+
+  /**
+   * Create stats breakdown modal content
+   */
+  function createStatsModalContent(performers) {
+    if (!performers || performers.length === 0) {
+      return '<div class="hon-stats-empty">No performer stats available</div>';
+    }
+
+    // Parse stats for each performer
+    const performersWithStats = performers.map((p, idx) => {
+      const stats = parsePerformerEloData(p);
+      return {
+        rank: idx + 1,
+        name: p.name || `Performer #${p.id}`,
+        id: p.id,
+        rating: p.rating100 || 50,
+        ...stats
+      };
+    });
+
+    // Calculate totals and averages
+    const totalMatches = performersWithStats.reduce((sum, p) => sum + p.total_matches, 0);
+    const totalWins = performersWithStats.reduce((sum, p) => sum + p.wins, 0);
+    const totalLosses = performersWithStats.reduce((sum, p) => sum + p.losses, 0);
+    const avgMatches = totalMatches / performers.length;
+    const avgRating = performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performers.length;
+
+    // Create table rows
+    const tableRows = performersWithStats.map(p => {
+      const winRate = p.total_matches > 0 ? ((p.wins / p.total_matches) * 100).toFixed(1) : 'N/A';
+      const streakDisplay = p.current_streak > 0 
+        ? `<span class="hon-stats-positive">+${p.current_streak}</span>` 
+        : p.current_streak < 0 
+          ? `<span class="hon-stats-negative">${p.current_streak}</span>`
+          : '0';
+      
+      return `
+        <tr>
+          <td class="hon-stats-rank">#${p.rank}</td>
+          <td class="hon-stats-name">
+            <a href="/performers/${p.id}" target="_blank">${p.name}</a>
+          </td>
+          <td class="hon-stats-rating">${p.rating}</td>
+          <td>${p.total_matches}</td>
+          <td class="hon-stats-positive">${p.wins}</td>
+          <td class="hon-stats-negative">${p.losses}</td>
+          <td>${winRate}${winRate !== 'N/A' ? '%' : ''}</td>
+          <td>${streakDisplay}</td>
+          <td class="hon-stats-positive">${p.best_streak}</td>
+          <td class="hon-stats-negative">${p.worst_streak}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="hon-stats-modal-content">
+        <h2 class="hon-stats-title">📊 Performer Statistics</h2>
+        
+        <div class="hon-stats-summary">
+          <div class="hon-stats-summary-item">
+            <span class="hon-stats-summary-label">Total Performers:</span>
+            <span class="hon-stats-summary-value">${performers.length}</span>
+          </div>
+          <div class="hon-stats-summary-item">
+            <span class="hon-stats-summary-label">Total Matches:</span>
+            <span class="hon-stats-summary-value">${totalMatches}</span>
+          </div>
+          <div class="hon-stats-summary-item">
+            <span class="hon-stats-summary-label">Average Matches/Performer:</span>
+            <span class="hon-stats-summary-value">${avgMatches.toFixed(1)}</span>
+          </div>
+          <div class="hon-stats-summary-item">
+            <span class="hon-stats-summary-label">Average Rating:</span>
+            <span class="hon-stats-summary-value">${avgRating.toFixed(1)}/100</span>
+          </div>
+        </div>
+
+        <div class="hon-stats-table-container">
+          <table class="hon-stats-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Performer</th>
+                <th>Rating</th>
+                <th>Matches</th>
+                <th>Wins</th>
+                <th>Losses</th>
+                <th>Win Rate</th>
+                <th>Streak</th>
+                <th>Best</th>
+                <th>Worst</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Open stats modal
+   */
+  async function openStatsModal() {
+    const existingStatsModal = document.getElementById("hon-stats-modal");
+    if (existingStatsModal) {
+      existingStatsModal.remove();
+    }
+
+    const statsModal = document.createElement("div");
+    statsModal.id = "hon-stats-modal";
+    statsModal.className = "hon-stats-modal";
+    statsModal.innerHTML = `
+      <div class="hon-modal-backdrop"></div>
+      <div class="hon-stats-modal-dialog">
+        <button class="hon-modal-close">✕</button>
+        <div class="hon-stats-loading">Loading stats...</div>
+      </div>
+    `;
+
+    document.body.appendChild(statsModal);
+
+    // Close handlers
+    statsModal.querySelector(".hon-modal-backdrop").addEventListener("click", () => {
+      statsModal.remove();
+    });
+    statsModal.querySelector(".hon-modal-close").addEventListener("click", () => {
+      statsModal.remove();
+    });
+
+    // Fetch and display stats
+    try {
+      const performers = await fetchAllPerformerStats();
+      const content = createStatsModalContent(performers);
+      const dialog = statsModal.querySelector(".hon-stats-modal-dialog");
+      dialog.innerHTML = `
+        <button class="hon-modal-close">✕</button>
+        ${content}
+      `;
+
+      // Re-attach close handler after updating content
+      dialog.querySelector(".hon-modal-close").addEventListener("click", () => {
+        statsModal.remove();
+      });
+    } catch (error) {
+      console.error("[HotOrNot] Error loading stats:", error);
+      const dialog = statsModal.querySelector(".hon-stats-modal-dialog");
+      dialog.innerHTML = `
+        <button class="hon-modal-close">✕</button>
+        <div class="hon-stats-error">Error loading stats: ${error.message}</div>
+      `;
+      
+      dialog.querySelector(".hon-modal-close").addEventListener("click", () => {
+        statsModal.remove();
+      });
+    }
+  }
+
   function createMainUI() {
     const itemType = battleType === "performers" ? "performers" : (battleType === "images" ? "images" : "scenes");
     const itemTypeSingular = battleType === "performers" ? "performer" : (battleType === "images" ? "image" : "scene");
@@ -2704,12 +2888,20 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
     ` : '';
     
+    // Stats button for performers
+    const statsButtonHTML = battleType === "performers" ? `
+          <button id="hon-stats-btn" class="btn btn-primary hon-stats-button">
+            📊 View All Stats
+          </button>
+    ` : '';
+    
     return `
       <div id="hotornot-container" class="hon-container">
         <div class="hon-header">
           <h1 class="hon-title">🔥 HotOrNot</h1>
           <p class="hon-subtitle">Compare ${itemType} head-to-head to build your rankings</p>
           ${modeToggleHTML}
+          ${statsButtonHTML}
         </div>
 
         <div id="hon-performer-selection" class="hon-performer-selection" style="display: none;">
@@ -3325,6 +3517,14 @@ function addFloatingButton() {
           gauntletFallingItem = null;
         }
         loadNewPair();
+      });
+    }
+
+    // Stats button (performers only)
+    const statsBtn = modal.querySelector("#hon-stats-btn");
+    if (statsBtn) {
+      statsBtn.addEventListener("click", () => {
+        openStatsModal();
       });
     }
 
