@@ -2745,17 +2745,24 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
       : '50.0';
 
-    // Calculate rating distribution for bar graph (0-10, 10-20, ..., 90-100)
+    // Calculate rating distribution for bar graph (0.1-1.0, 1.1-2.0, ..., 9.1-10.0)
+    // rating100 is 1-100, display as 0.1-10.0 by dividing by 10
     const ratingBuckets = Array(10).fill(0);
     performersWithStats.forEach(p => {
-      const bucketIndex = Math.min(9, Math.floor(p.rating / 10));
+      // Map rating 1-100 to bucket index 0-9
+      // rating 1-10 -> bucket 0 (0.1-1.0)
+      // rating 11-20 -> bucket 1 (1.1-2.0)
+      // ...
+      // rating 91-100 -> bucket 9 (9.1-10.0)
+      const bucketIndex = Math.min(9, Math.floor((p.rating - 1) / 10));
       ratingBuckets[bucketIndex]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
     const barGraphHTML = ratingBuckets.map((count, idx) => {
-      const rangeStart = idx * 10;
-      const rangeEnd = (idx + 1) * 10;
+      // Convert bucket index to display range (0.1-10.0)
+      const rangeStart = (idx + 0.1).toFixed(1);
+      const rangeEnd = (idx + 1.0).toFixed(1);
       const percentage = (count / maxCount) * 100;
       return `
         <div class="hon-bar-container">
