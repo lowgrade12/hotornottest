@@ -2815,7 +2815,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
       return `
         <div class="hon-rank-group">
-          <div class="hon-rank-group-header" data-group="${groupIndex}" role="button" aria-expanded="false" aria-controls="rank-group-${groupIndex}">
+          <div class="hon-rank-group-header" data-group="${groupIndex}" role="button" aria-expanded="false" aria-controls="rank-group-${groupIndex}" aria-label="Toggle ranks ${group.startRank} to ${group.endRank} group">
             <span class="hon-rank-group-toggle">▶</span>
             <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
             <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
