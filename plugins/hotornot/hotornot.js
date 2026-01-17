@@ -17,8 +17,8 @@
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
   // GraphQL filter modifier constants
-  // Array-based modifiers with enum types (e.g., GenderCriterionInput) require value_list field.
-  // ID-based filters (e.g., tags, studios) always use 'value' field regardless of modifier.
+  // Array-based modifiers require value_list field for enum-based criterion inputs
+  // (e.g., GenderCriterionInput). Non-enum filters like StringCriterionInput use 'value' field.
   const ARRAY_BASED_MODIFIERS = new Set(['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL']);
 
   // ============================================
@@ -291,13 +291,14 @@
     switch (type) {
       case 'tags':
         // Tags filter: value contains items (tag IDs) and depth
-        // Tags are ID-based (not enum-based), so they always use 'value' field regardless of modifier
         if (value && value.items && value.items.length > 0) {
           const effectiveModifier = modifier || 'INCLUDES';
+          // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+          const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
           
           return {
             tags: {
-              value: value.items,
+              [useValueList ? 'value_list' : 'value']: value.items,
               modifier: effectiveModifier,
               depth: value.depth || 0
             }
@@ -307,13 +308,14 @@
         
       case 'studios':
         // Studios filter
-        // Studios are ID-based (not enum-based), so they always use 'value' field regardless of modifier
         if (value && value.items && value.items.length > 0) {
           const effectiveModifier = modifier || 'INCLUDES';
+          // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+          const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
           
           return {
             studios: {
-              value: value.items,
+              [useValueList ? 'value_list' : 'value']: value.items,
               modifier: effectiveModifier,
               depth: value.depth || 0
             }
