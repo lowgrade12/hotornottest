@@ -2759,9 +2759,8 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     const maxCount = Math.max(...ratingBuckets, 1);
     const barGraphHTML = ratingBuckets
-      .map((count, bucketIndex) => ({ count, bucketIndex }))
-      .filter(({ count }) => count > 0)
-      .map(({ count, bucketIndex }) => {
+      .map((count, bucketIndex) => {
+        if (count === 0) return null;
         const percentage = (count / maxCount) * 100;
         const rangeStart = bucketIndex;
         const rangeEnd = bucketIndex + 1;
@@ -2777,6 +2776,7 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
         `;
       })
+      .filter(html => html !== null)
       .join('');
 
     // Group performers by 250 (1-250, 251-500, etc.)
