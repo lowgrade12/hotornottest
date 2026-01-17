@@ -2776,8 +2776,7 @@ async function fetchPerformerCount(performerFilter = {}) {
         const bucketIndex = groupIndex * 10 + bucketIndexInGroup;
         const percentage = (count / maxCount) * 100;
         const rangeStart = (bucketIndex / 10).toFixed(1);
-        const rangeEnd = ((bucketIndex + 1) / 10).toFixed(1);
-        const displayRange = `${rangeStart}-${rangeEnd}`;
+        const displayRange = `${rangeStart}`;
         
         return `
           <div class="hon-bar-container">
