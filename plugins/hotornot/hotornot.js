@@ -2748,7 +2748,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? ((performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount) / 10).toFixed(1) 
       : '5.0';
 
-    // Calculate rating distribution for bar graph (grouped by tens: 0-1, 1-2, 2-3, etc.)
+    // Calculate rating distribution for bar graph (10 rating ranges: 0-1, 1-2, 2-3, ..., 9-10)
     // Note: Rating 10.0 is included in the 9-10 range
     const ratingBuckets = Array(10).fill(0);
     performersWithStats.forEach(p => {
@@ -2758,26 +2758,38 @@ async function fetchPerformerCount(performerFilter = {}) {
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
-    const barGraphHTML = ratingBuckets
-      .map((count, bucketIndex) => {
-        if (count === 0) return null;
-        const percentage = (count / maxCount) * 100;
-        const rangeStart = bucketIndex;
-        const rangeEnd = bucketIndex + 1;
-        const displayRange = `${rangeStart}-${rangeEnd}`;
-        return `
-          <div class="hon-bar-container">
-            <div class="hon-bar-label">${displayRange}</div>
-            <div class="hon-bar-wrapper">
-              <div class="hon-bar" style="width: ${percentage}%">
-                <span class="hon-bar-count">${count}</span>
-              </div>
+    const totalInGroup = ratingBuckets.reduce((sum, count) => sum + count, 0);
+    
+    // Create collapsible bar graph group containing all rating ranges
+    // All 10 bars (0-1, 1-2, ..., 9-10) are displayed in a single collapsible section
+    const barsInGroup = ratingBuckets.map((count, bucketIndex) => {
+      const percentage = (count / maxCount) * 100;
+      const displayRange = `${bucketIndex}-${bucketIndex + 1}`;
+      
+      return `
+        <div class="hon-bar-container">
+          <div class="hon-bar-label">${displayRange}</div>
+          <div class="hon-bar-wrapper">
+            <div class="hon-bar" style="width: ${percentage}%">
+              <span class="hon-bar-count">${count}</span>
             </div>
           </div>
-        `;
-      })
-      .filter(html => html !== null)
-      .join('');
+        </div>
+      `;
+    });
+    
+    const barGraphHTML = `
+      <div class="hon-bar-group">
+        <div class="hon-bar-group-header" data-group="bar-0" role="button" aria-expanded="false" aria-controls="bar-group-0" aria-label="Toggle ratings 0 to 10 group">
+          <span class="hon-group-toggle">▶</span>
+          <span class="hon-bar-group-title">Ratings 0.0-10.0</span>
+          <span class="hon-bar-group-count">(${totalInGroup} performers)</span>
+        </div>
+        <div class="hon-bar-group-content collapsed" data-group="bar-0" id="bar-group-0">
+          ${barsInGroup.join('')}
+        </div>
+      </div>
+    `;
 
     // Group performers by 250 (1-250, 251-500, etc.)
     const groupedPerformers = [];
@@ -2822,7 +2834,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       return `
         <div class="hon-rank-group">
           <div class="hon-rank-group-header" data-group="${groupIndex}" role="button" aria-expanded="false" aria-controls="rank-group-${groupIndex}" aria-label="Toggle ranks ${group.startRank} to ${group.endRank} group">
-            <span class="hon-rank-group-toggle">▶</span>
+            <span class="hon-group-toggle">▶</span>
             <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
             <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
           </div>
@@ -2971,25 +2983,31 @@ async function fetchPerformerCount(performerFilter = {}) {
         });
       });
 
-      // Attach expand/collapse handlers for rank groups
-      const groupHeaders = dialog.querySelectorAll(".hon-rank-group-header");
-      groupHeaders.forEach(header => {
-        header.addEventListener("click", () => {
-          const groupIndex = header.dataset.group;
-          const content = dialog.querySelector(`.hon-rank-group-content[data-group="${groupIndex}"]`);
-          const toggle = header.querySelector(".hon-rank-group-toggle");
-          
-          if (content.classList.contains("collapsed")) {
-            content.classList.remove("collapsed");
-            header.setAttribute("aria-expanded", "true");
-            toggle.textContent = "▼";
-          } else {
-            content.classList.add("collapsed");
-            header.setAttribute("aria-expanded", "false");
-            toggle.textContent = "▶";
-          }
+      // Helper function to attach expand/collapse handlers to collapsible groups
+      const attachCollapseHandlers = (headerSelector, contentSelector) => {
+        const headers = dialog.querySelectorAll(headerSelector);
+        headers.forEach(header => {
+          header.addEventListener("click", () => {
+            const groupIndex = header.dataset.group;
+            const content = dialog.querySelector(`${contentSelector}[data-group="${groupIndex}"]`);
+            const toggle = header.querySelector(".hon-group-toggle");
+            
+            if (content && content.classList.contains("collapsed")) {
+              content.classList.remove("collapsed");
+              header.setAttribute("aria-expanded", "true");
+              toggle.textContent = "▼";
+            } else if (content) {
+              content.classList.add("collapsed");
+              header.setAttribute("aria-expanded", "false");
+              toggle.textContent = "▶";
+            }
+          });
         });
-      });
+      };
+
+      // Attach expand/collapse handlers for rank groups and bar graph groups
+      attachCollapseHandlers(".hon-rank-group-header", ".hon-rank-group-content");
+      attachCollapseHandlers(".hon-bar-group-header", ".hon-bar-group-content");
     } catch (error) {
       console.error("[HotOrNot] Error loading stats:", error);
       const dialog = statsModal.querySelector(".hon-stats-modal-dialog");
