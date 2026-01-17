@@ -914,3 +914,202 @@
     font-size: 0.75rem;
   }
 }
+
+/* ============================================
+   PERFORMER STATS BUTTON & MODAL
+   ============================================ */
+
+.hon-stats-button-container {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.hon-stats-btn {
+  background: #444;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hon-stats-btn:hover {
+  background: #555;
+  border-color: #0d6efd;
+  color: #0d6efd;
+}
+
+/* Stats Modal */
+#hon-stats-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hon-stats-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.hon-stats-content {
+  position: relative;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 12px;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.hon-stats-close {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 1.8rem;
+  cursor: pointer;
+  z-index: 10;
+  transition: color 0.2s;
+}
+
+.hon-stats-close:hover {
+  color: #fff;
+}
+
+.hon-stats-header {
+  text-align: center;
+  padding: 30px 20px 20px;
+  border-bottom: 2px solid #333;
+}
+
+.hon-stats-image {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid #0d6efd;
+  margin-bottom: 15px;
+}
+
+.hon-stats-image.hon-no-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.hon-stats-title {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #fff;
+  margin: 0 0 10px 0;
+}
+
+.hon-stats-rating {
+  font-size: 1.1rem;
+  color: #888;
+}
+
+.hon-stats-body {
+  padding: 20px;
+}
+
+.hon-stats-section-title {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #fff;
+  margin: 20px 0 15px 0;
+}
+
+.hon-stats-section-title:first-child {
+  margin-top: 0;
+}
+
+.hon-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.hon-stat-item {
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+}
+
+.hon-stat-label {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.hon-stat-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
+}
+
+.hon-stat-wins {
+  color: #28a745;
+}
+
+.hon-stat-losses {
+  color: #dc3545;
+}
+
+.hon-stat-best {
+  color: #ffc107;
+}
+
+.hon-stat-worst {
+  color: #6c757d;
+}
+
+@media (max-width: 768px) {
+  .hon-stats-content {
+    width: 95%;
+  }
+  
+  .hon-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .hon-stats-image {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .hon-stats-title {
+    font-size: 1.4rem;
+  }
+  
+  .hon-stat-value {
+    font-size: 1.2rem;
+  }
+}

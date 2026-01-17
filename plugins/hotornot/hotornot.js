@@ -2426,6 +2426,10 @@ async function fetchPerformerCount(performerFilter = {}) {
     const country = performer.country || null;
     const stashRating = performer.rating100 ? `${performer.rating100}/100` : "Unrated";
     
+    // Parse stats for display
+    const stats = parsePerformerEloData(performer);
+    const hasStats = stats.total_matches > 0;
+    
     // Handle numeric ranks and string ranks
     let rankDisplay = '';
     if (rank !== null && rank !== undefined) {
@@ -2443,7 +2447,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     }
 
     return `
-      <div class="hon-performer-card hon-scene-card" data-performer-id="${performer.id}" data-side="${side}" data-rating="${performer.rating100 || 50}">
+      <div class="hon-performer-card hon-scene-card" data-performer-id="${performer.id}" data-side="${side}" data-rating="${performer.rating100 || 50}" data-performer-data='${JSON.stringify(performer).replace(/'/g, "&apos;")}'>
         <div class="hon-performer-image-container hon-scene-image-container" data-performer-url="/performers/${performer.id}">
           ${imagePath 
             ? `<img class="hon-performer-image hon-scene-image" src="${imagePath}" alt="${name}" loading="lazy" />`
@@ -2466,6 +2470,13 @@ async function fetchPerformerCount(performerFilter = {}) {
               ${country ? `<div class="hon-meta-item"><strong>Country:</strong> ${country}</div>` : ''}
               <div class="hon-meta-item"><strong>Rating:</strong> ${stashRating}</div>
             </div>
+            ${hasStats ? `
+            <div class="hon-stats-button-container">
+              <button class="hon-stats-btn" data-performer-id="${performer.id}">
+                📊 View Stats
+              </button>
+            </div>
+            ` : ''}
           </div>
           
           <div class="hon-choose-btn">
@@ -2889,6 +2900,27 @@ async function fetchPerformerCount(performerFilter = {}) {
           video.currentTime = 0;
         });
       });
+      
+      // Attach stats button handlers (for performers only)
+      if (battleType === "performers") {
+        comparisonArea.querySelectorAll(".hon-stats-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation(); // Prevent triggering the choose handler
+            const performerCard = btn.closest(".hon-performer-card");
+            if (performerCard) {
+              const performerData = performerCard.dataset.performerData;
+              if (performerData) {
+                try {
+                  const performer = JSON.parse(performerData);
+                  showPerformerStats(performer);
+                } catch (err) {
+                  console.error("[HotOrNot] Failed to parse performer data:", err);
+                }
+              }
+            }
+          });
+        });
+      }
       
       // Update skip button state (only disabled for performers in gauntlet/champion mode)
       const skipBtn = document.querySelector("#hon-skip-btn");
@@ -3371,6 +3403,140 @@ function addFloatingButton() {
   function closeRankingModal() {
     const modal = document.getElementById("hon-modal");
     if (modal) modal.remove();
+  }
+
+  // ============================================
+  // STATS MODAL
+  // ============================================
+
+  function formatLastMatch(lastMatchISO) {
+    if (!lastMatchISO) return 'Never';
+    
+    const lastMatch = new Date(lastMatchISO);
+    const now = new Date();
+    const diffMs = now - lastMatch;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return lastMatch.toLocaleDateString();
+    }
+  }
+
+  function formatStreak(streak) {
+    if (streak === 0) return 'None';
+    const absStreak = Math.abs(streak);
+    if (streak > 0) {
+      return `🔥 ${absStreak} win${absStreak !== 1 ? 's' : ''}`;
+    } else {
+      return `❄️ ${absStreak} loss${absStreak !== 1 ? 'es' : ''}`;
+    }
+  }
+
+  function showPerformerStats(performer) {
+    const stats = parsePerformerEloData(performer);
+    const name = performer.name || `Performer #${performer.id}`;
+    const imagePath = performer.image_path || null;
+    const rating = performer.rating100 ? `${performer.rating100}/100` : 'Unrated';
+    
+    // Calculate win rate
+    const totalDecisiveMatches = stats.wins + stats.losses;
+    const winRate = totalDecisiveMatches > 0 
+      ? ((stats.wins / totalDecisiveMatches) * 100).toFixed(1) 
+      : '0.0';
+    
+    // Create stats modal
+    const existingStatsModal = document.getElementById('hon-stats-modal');
+    if (existingStatsModal) existingStatsModal.remove();
+    
+    const statsModal = document.createElement('div');
+    statsModal.id = 'hon-stats-modal';
+    statsModal.innerHTML = `
+      <div class="hon-stats-backdrop"></div>
+      <div class="hon-stats-content">
+        <button class="hon-stats-close">✕</button>
+        <div class="hon-stats-header">
+          ${imagePath 
+            ? `<img class="hon-stats-image" src="${imagePath}" alt="${name}" />`
+            : `<div class="hon-stats-image hon-no-image">No Image</div>`
+          }
+          <h2 class="hon-stats-title">${name}</h2>
+          <div class="hon-stats-rating">Rating: ${rating}</div>
+        </div>
+        <div class="hon-stats-body">
+          <h3 class="hon-stats-section-title">📊 Overall Statistics</h3>
+          <div class="hon-stats-grid">
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Total Matches</div>
+              <div class="hon-stat-value">${stats.total_matches}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Wins</div>
+              <div class="hon-stat-value hon-stat-wins">${stats.wins}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Losses</div>
+              <div class="hon-stat-value hon-stat-losses">${stats.losses}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Win Rate</div>
+              <div class="hon-stat-value">${winRate}%</div>
+            </div>
+          </div>
+          
+          <h3 class="hon-stats-section-title">🔥 Streaks</h3>
+          <div class="hon-stats-grid">
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Current Streak</div>
+              <div class="hon-stat-value">${formatStreak(stats.current_streak)}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Best Win Streak</div>
+              <div class="hon-stat-value hon-stat-best">${stats.best_streak > 0 ? '🔥 ' + stats.best_streak : 'None'}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Worst Loss Streak</div>
+              <div class="hon-stat-value hon-stat-worst">${stats.worst_streak < 0 ? '❄️ ' + Math.abs(stats.worst_streak) : 'None'}</div>
+            </div>
+            <div class="hon-stat-item">
+              <div class="hon-stat-label">Last Match</div>
+              <div class="hon-stat-value">${formatLastMatch(stats.last_match)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(statsModal);
+    
+    // Add event listeners
+    const backdrop = statsModal.querySelector('.hon-stats-backdrop');
+    const closeBtn = statsModal.querySelector('.hon-stats-close');
+    
+    const closeModal = () => {
+      statsModal.remove();
+    };
+    
+    backdrop.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', closeModal);
+    
+    // ESC key to close
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
   }
 
   // ============================================
