@@ -2758,14 +2758,30 @@ async function fetchPerformerCount(performerFilter = {}) {
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
-    const barGraphHTML = ratingBuckets
-      .map((count, bucketIndex) => {
-        if (count === 0) return null;
+    
+    // Group bars into collapsible sections
+    // Each group contains bars representing a span of 10 rating points
+    // Since we have 10 bars total (0-1, 1-2, ..., 9-10), we'll have one group containing all bars
+    const barGroups = [];
+    const barsPerGroup = 10; // All 10 bars in one group
+    
+    for (let groupIndex = 0; groupIndex < Math.ceil(10 / barsPerGroup); groupIndex++) {
+      const startBucket = groupIndex * barsPerGroup;
+      const endBucket = Math.min(startBucket + barsPerGroup, 10);
+      
+      const barsInGroup = [];
+      let totalInGroup = 0;
+      
+      for (let bucketIndex = startBucket; bucketIndex < endBucket; bucketIndex++) {
+        const count = ratingBuckets[bucketIndex];
+        totalInGroup += count;
+        
         const percentage = (count / maxCount) * 100;
         const rangeStart = bucketIndex;
         const rangeEnd = bucketIndex + 1;
         const displayRange = `${rangeStart}-${rangeEnd}`;
-        return `
+        
+        barsInGroup.push(`
           <div class="hon-bar-container">
             <div class="hon-bar-label">${displayRange}</div>
             <div class="hon-bar-wrapper">
@@ -2774,10 +2790,33 @@ async function fetchPerformerCount(performerFilter = {}) {
               </div>
             </div>
           </div>
-        `;
-      })
-      .filter(html => html !== null)
-      .join('');
+        `);
+      }
+      
+      if (barsInGroup.length > 0) {
+        barGroups.push({
+          startRating: startBucket,
+          endRating: endBucket,
+          bars: barsInGroup.join(''),
+          count: totalInGroup
+        });
+      }
+    }
+    
+    const barGraphHTML = barGroups.map((group, groupIndex) => {
+      return `
+        <div class="hon-bar-group">
+          <div class="hon-bar-group-header" data-group="bar-${groupIndex}" role="button" aria-expanded="false" aria-controls="bar-group-${groupIndex}" aria-label="Toggle ratings ${group.startRating} to ${group.endRating} group">
+            <span class="hon-bar-group-toggle">▶</span>
+            <span class="hon-bar-group-title">Ratings ${group.startRating}.0-${group.endRating}.0</span>
+            <span class="hon-bar-group-count">(${group.count} performers)</span>
+          </div>
+          <div class="hon-bar-group-content collapsed" data-group="bar-${groupIndex}" id="bar-group-${groupIndex}">
+            ${group.bars}
+          </div>
+        </div>
+      `;
+    }).join('');
 
     // Group performers by 250 (1-250, 251-500, etc.)
     const groupedPerformers = [];
@@ -2978,6 +3017,26 @@ async function fetchPerformerCount(performerFilter = {}) {
           const groupIndex = header.dataset.group;
           const content = dialog.querySelector(`.hon-rank-group-content[data-group="${groupIndex}"]`);
           const toggle = header.querySelector(".hon-rank-group-toggle");
+          
+          if (content.classList.contains("collapsed")) {
+            content.classList.remove("collapsed");
+            header.setAttribute("aria-expanded", "true");
+            toggle.textContent = "▼";
+          } else {
+            content.classList.add("collapsed");
+            header.setAttribute("aria-expanded", "false");
+            toggle.textContent = "▶";
+          }
+        });
+      });
+
+      // Attach expand/collapse handlers for bar graph groups
+      const barGroupHeaders = dialog.querySelectorAll(".hon-bar-group-header");
+      barGroupHeaders.forEach(header => {
+        header.addEventListener("click", () => {
+          const groupIndex = header.dataset.group;
+          const content = dialog.querySelector(`.hon-bar-group-content[data-group="${groupIndex}"]`);
+          const toggle = header.querySelector(".hon-bar-group-toggle");
           
           if (content.classList.contains("collapsed")) {
             content.classList.remove("collapsed");
