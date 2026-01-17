@@ -2758,22 +2758,15 @@ async function fetchPerformerCount(performerFilter = {}) {
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
+    const totalInGroup = ratingBuckets.reduce((sum, count) => sum + count, 0);
     
     // Create collapsible bar graph group containing all rating ranges
     // All 10 bars (0-1, 1-2, ..., 9-10) are displayed in a single collapsible section
-    const barsInGroup = [];
-    let totalInGroup = 0;
-    
-    for (let bucketIndex = 0; bucketIndex < 10; bucketIndex++) {
-      const count = ratingBuckets[bucketIndex];
-      totalInGroup += count;
-      
+    const barsInGroup = ratingBuckets.map((count, bucketIndex) => {
       const percentage = (count / maxCount) * 100;
-      const rangeStart = bucketIndex;
-      const rangeEnd = bucketIndex + 1;
-      const displayRange = `${rangeStart}-${rangeEnd}`;
+      const displayRange = `${bucketIndex}-${bucketIndex + 1}`;
       
-      barsInGroup.push(`
+      return `
         <div class="hon-bar-container">
           <div class="hon-bar-label">${displayRange}</div>
           <div class="hon-bar-wrapper">
@@ -2782,13 +2775,13 @@ async function fetchPerformerCount(performerFilter = {}) {
             </div>
           </div>
         </div>
-      `);
-    }
+      `;
+    });
     
     const barGraphHTML = `
       <div class="hon-bar-group">
         <div class="hon-bar-group-header" data-group="bar-0" role="button" aria-expanded="false" aria-controls="bar-group-0" aria-label="Toggle ratings 0 to 10 group">
-          <span class="hon-bar-group-toggle">▶</span>
+          <span class="hon-group-toggle">▶</span>
           <span class="hon-bar-group-title">Ratings 0.0-10.0</span>
           <span class="hon-bar-group-count">(${totalInGroup} performers)</span>
         </div>
@@ -2841,7 +2834,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       return `
         <div class="hon-rank-group">
           <div class="hon-rank-group-header" data-group="${groupIndex}" role="button" aria-expanded="false" aria-controls="rank-group-${groupIndex}" aria-label="Toggle ranks ${group.startRank} to ${group.endRank} group">
-            <span class="hon-rank-group-toggle">▶</span>
+            <span class="hon-group-toggle">▶</span>
             <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
             <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
           </div>
@@ -2997,7 +2990,7 @@ async function fetchPerformerCount(performerFilter = {}) {
           header.addEventListener("click", () => {
             const groupIndex = header.dataset.group;
             const content = dialog.querySelector(`${contentSelector}[data-group="${groupIndex}"]`);
-            const toggle = header.querySelector(".hon-rank-group-toggle, .hon-bar-group-toggle");
+            const toggle = header.querySelector(".hon-group-toggle");
             
             if (content && content.classList.contains("collapsed")) {
               content.classList.remove("collapsed");

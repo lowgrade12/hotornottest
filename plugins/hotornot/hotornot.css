@@ -1107,6 +1107,13 @@
   padding: 20px;
 }
 
+/* Shared Group Toggle Styles */
+.hon-group-toggle {
+  font-size: 0.9rem;
+  color: #888;
+  min-width: 20px;
+}
+
 /* Bar Graph Group Styles */
 .hon-bar-group {
   border: 1px solid #333;
@@ -1128,12 +1135,6 @@
 
 .hon-bar-group-header:hover {
   background: rgba(255, 255, 255, 0.1);
-}
-
-.hon-bar-group-toggle {
-  font-size: 0.9rem;
-  color: #888;
-  min-width: 20px;
 }
 
 .hon-bar-group-title {
@@ -1182,12 +1183,6 @@
 
 .hon-rank-group-header:hover {
   background: rgba(255, 255, 255, 0.1);
-}
-
-.hon-rank-group-toggle {
-  font-size: 0.9rem;
-  color: #888;
-  min-width: 20px;
 }
 
 .hon-rank-group-title {
