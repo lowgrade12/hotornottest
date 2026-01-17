@@ -2820,7 +2820,7 @@ async function fetchPerformerCount(performerFilter = {}) {
             <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
             <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
           </div>
-          <div class="hon-rank-group-content" data-group="${groupIndex}" style="display: none;">
+          <div class="hon-rank-group-content collapsed" data-group="${groupIndex}">
             <table class="hon-stats-table" role="table">
               <tbody>
                 ${groupRows}
@@ -2973,11 +2973,11 @@ async function fetchPerformerCount(performerFilter = {}) {
           const content = dialog.querySelector(`.hon-rank-group-content[data-group="${groupIndex}"]`);
           const toggle = header.querySelector(".hon-rank-group-toggle");
           
-          if (content.style.display === "none") {
-            content.style.display = "block";
+          if (content.classList.contains("collapsed")) {
+            content.classList.remove("collapsed");
             toggle.textContent = "▼";
           } else {
-            content.style.display = "none";
+            content.classList.add("collapsed");
             toggle.textContent = "▶";
           }
         });

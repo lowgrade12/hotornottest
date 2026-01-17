@@ -1157,6 +1157,10 @@
   border-top: 1px solid #333;
 }
 
+.hon-rank-group-content.collapsed {
+  display: none;
+}
+
 .hon-rank-group-content .hon-stats-table {
   margin: 0;
 }
