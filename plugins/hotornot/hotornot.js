@@ -2815,13 +2815,13 @@ async function fetchPerformerCount(performerFilter = {}) {
 
       return `
         <div class="hon-rank-group">
-          <div class="hon-rank-group-header" data-group="${groupIndex}">
+          <div class="hon-rank-group-header" data-group="${groupIndex}" role="button" aria-expanded="false" aria-controls="rank-group-${groupIndex}">
             <span class="hon-rank-group-toggle">▶</span>
             <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
             <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
           </div>
-          <div class="hon-rank-group-content collapsed" data-group="${groupIndex}">
-            <table class="hon-stats-table" role="table">
+          <div class="hon-rank-group-content collapsed" data-group="${groupIndex}" id="rank-group-${groupIndex}">
+            <table class="hon-stats-table" role="table" aria-label="Ranks ${group.startRank}-${group.endRank} statistics">
               <tbody>
                 ${groupRows}
               </tbody>
@@ -2975,9 +2975,11 @@ async function fetchPerformerCount(performerFilter = {}) {
           
           if (content.classList.contains("collapsed")) {
             content.classList.remove("collapsed");
+            header.setAttribute("aria-expanded", "true");
             toggle.textContent = "▼";
           } else {
             content.classList.add("collapsed");
+            header.setAttribute("aria-expanded", "false");
             toggle.textContent = "▶";
           }
         });
