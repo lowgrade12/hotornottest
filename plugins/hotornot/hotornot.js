@@ -1644,7 +1644,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       // Use image_count filter to exclude performers with 0 images
       if (!filter.image_count) {
         filter.image_count = {
-          value: 1,
+          value: 0,
           modifier: "GREATER_THAN"
         };
       }
