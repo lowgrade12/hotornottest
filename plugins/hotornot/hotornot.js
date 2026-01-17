@@ -1627,20 +1627,28 @@ async function fetchPerformerCount(performerFilter = {}) {
     const urlFilter = cachedUrlFilter || {};
     const filter = { ...urlFilter };
     
-    // Apply default filters only if not overridden by URL filters
+    // Apply default filters only when no other filters are selected
+    // Check if urlFilter is empty (no user-applied filters)
+    const hasUserFilters = urlFilter && Object.keys(urlFilter).length > 0;
     
-    // Exclude male performers (unless URL filter specifies a gender)
-    if (!filter.gender) {
-      filter.gender = {
-        value_list: ["MALE"],
-        modifier: "EXCLUDES"
-      };
+    if (!hasUserFilters) {
+      // Exclude male performers by default
+      if (!filter.gender) {
+        filter.gender = {
+          value_list: ["MALE"],
+          modifier: "EXCLUDES"
+        };
+      }
+      
+      // Exclude performers with missing images by default
+      // Use image_count filter to exclude performers with 0 images
+      if (!filter.image_count) {
+        filter.image_count = {
+          value: 1,
+          modifier: "GREATER_THAN"
+        };
+      }
     }
-    
-    // Note: Removed the NOT filter for is_missing as it was causing GraphQL 400 errors
-    // The filter structure `NOT: { is_missing: "image" }` is invalid for the Stash GraphQL API
-    // TODO: Consider implementing client-side filtering to exclude performers without images,
-    // or investigate the correct GraphQL filter structure for this use case
     
     return filter;
   }
@@ -2745,21 +2753,21 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
       : '50.0';
 
-    // Calculate rating distribution for bar graph (0-10, 10-20, ..., 90-100)
-    const ratingBuckets = Array(10).fill(0);
+    // Calculate rating distribution for bar graph (individual ratings 0-100)
+    const ratingBuckets = Array(101).fill(0);
     performersWithStats.forEach(p => {
-      const bucketIndex = Math.min(9, Math.floor(p.rating / 10));
-      ratingBuckets[bucketIndex]++;
+      const rating = Math.min(100, Math.max(0, p.rating));
+      ratingBuckets[rating]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
-    const barGraphHTML = ratingBuckets.map((count, idx) => {
-      const rangeStart = idx * 10;
-      const rangeEnd = (idx + 1) * 10;
+    const barGraphHTML = ratingBuckets.map((count, rating) => {
       const percentage = (count / maxCount) * 100;
+      // Only show bars with non-zero counts to reduce clutter
+      if (count === 0) return '';
       return `
         <div class="hon-bar-container">
-          <div class="hon-bar-label">${rangeStart}-${rangeEnd}</div>
+          <div class="hon-bar-label">${rating}</div>
           <div class="hon-bar-wrapper">
             <div class="hon-bar" style="width: ${percentage}%">
               <span class="hon-bar-count">${count}</span>
