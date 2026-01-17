@@ -292,10 +292,14 @@
       case 'tags':
         // Tags filter: value contains items (tag IDs) and depth
         if (value && value.items && value.items.length > 0) {
+          const effectiveModifier = modifier || 'INCLUDES';
+          // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+          const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
+          
           return {
             tags: {
-              value: value.items,
-              modifier: modifier || 'INCLUDES',
+              [useValueList ? 'value_list' : 'value']: value.items,
+              modifier: effectiveModifier,
               depth: value.depth || 0
             }
           };
@@ -305,10 +309,14 @@
       case 'studios':
         // Studios filter
         if (value && value.items && value.items.length > 0) {
+          const effectiveModifier = modifier || 'INCLUDES';
+          // Use value_list for array-based modifiers (INCLUDES, EXCLUDES, etc.)
+          const useValueList = ARRAY_BASED_MODIFIERS.has(effectiveModifier);
+          
           return {
             studios: {
-              value: value.items,
-              modifier: modifier || 'INCLUDES',
+              [useValueList ? 'value_list' : 'value']: value.items,
+              modifier: effectiveModifier,
               depth: value.depth || 0
             }
           };
