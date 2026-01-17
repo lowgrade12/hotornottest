@@ -1,88 +1,50 @@
-# Image Performance Optimization
+# Image Performance Optimization (REMOVED)
 
 ## Summary
 
-This document describes the performance optimizations made to handle large image libraries (177,000+ images) and the simplification to use Swiss mode exclusively for images.
+**Note: As of the latest update, the performance optimization sampling has been removed per user request.**
 
-## Changes Made
+Previously, this document described performance optimizations for handling large image libraries (177,000+ images) using intelligent sampling. The optimization has been removed and the system now uses full datasets for both performers and images regardless of library size.
 
-### 1. Sampling for Image Swiss Mode
+## What Was Changed
 
-Images use intelligent sampling when the library exceeds 1,000 images:
+The following optimizations have been **REMOVED**:
+- Sampling for large image pools (>1000 images)
+- Sampling for large performer pools (>1000 performers)
+- The 500-item sample limit for Swiss mode
 
-- **Libraries with ≤1,000 images**: Uses full dataset for accurate ranking
-- **Libraries with >1,000 images**: Uses intelligent sampling (500 images) for fast performance
-- Sampling uses random selection to ensure variety while maintaining rating-based matching
+## Current Behavior
 
-**Code Changes:**
-- Updated `fetchSwissPairImages()` to check total image count and use sampling when appropriate
-- When sampling is used, ranks are set to `null` since they don't represent true position in the full library
-- Same adaptive rating window logic applies (10-25 point window based on pool size)
+All modes now use the full dataset:
+- **Performers**: Fetches all performers with `per_page: -1` for accurate ranking
+- **Images**: Fetches all images with `per_page: -1` for accurate ranking
+- Ranks are always meaningful and represent true position in the library
+- No sampling logic in Swiss mode
 
-### 2. Swiss Mode Only for Images
+## Benefits of Full Dataset Approach
 
-Images now use **Swiss mode exclusively** for optimal performance and simplicity:
+- **Accurate Rankings**: All items are considered, providing true rankings
+- **Consistent Results**: No sampling variation between sessions
+- **Simpler Code**: Removed complexity from conditional sampling logic
+- **Complete Coverage**: Every item in library can be matched
 
-**What was removed:**
-- Gauntlet mode for images (including 5-image selection UI)
-- Champion mode for images
-- Mode selection toggle on images page
+## Potential Considerations
 
-**What was kept:**
-- Full Swiss mode functionality with performance optimizations
-- All three modes (Swiss, Gauntlet, Champion) remain available for performers
+For very large libraries (15,000+ items), the full dataset approach may:
+- Increase initial query time
+- Use more memory
+- Take longer to load comparison pairs
 
-**Benefits:**
-- Simpler, cleaner UI for images
-- No need to track champion state or defeated opponents for images
-- Performance optimizations (sampling) work perfectly with Swiss mode
-- Users get straight into comparisons without mode selection
-
-## Performance Impact
-
-### Before Optimization:
-- **Swiss Mode**: Fetched ALL images (177,000) from database, causing significant performance issues
-- **Gauntlet/Champion Modes**: Required full dataset loading and complex state tracking
-
-### After Optimization:
-- **Swiss Mode Only**: Fetches only 500 images when library > 1,000 images
-- **No Gauntlet/Champion**: Simplified code path, no unnecessary mode logic
-- **Expected Performance**: ~350x reduction in data transfer for large libraries (177,000 → 500 images)
-- **UI Performance**: Faster load times, simpler state management
-
-## Technical Details
-
-The implementation uses intelligent sampling:
-
-```javascript
-// Sampling logic
-const totalImages = await fetchImageCount();
-const useSampling = totalImages > 1000;
-const sampleSize = useSampling ? Math.min(500, totalImages) : totalImages;
-
-// Query adjustment
-filter: {
-  per_page: sampleSize,
-  sort: useSampling ? "random" : "rating",
-  direction: useSampling ? undefined : "DESC"
-}
-```
-
-Mode enforcement for images:
-
-```javascript
-// Force Swiss mode for images
-if (path === '/images' || path === '/images/') {
-  battleType = "images";
-  currentMode = "swiss";  // Always Swiss for images
-}
-```
+Users with extremely large libraries should monitor performance and consider:
+- Database query optimization
+- Pagination strategies
+- Caching mechanisms
 
 ## User Experience
 
-1. **Swiss Mode**: Fast, fair matchups with no mode selection needed
-   - Click the 🔥 button on images page
-   - Start comparing immediately (no mode choice)
+1. **Swiss Mode**: Accurate matchups with complete library coverage
+   - Click the 🔥 button on performers/images page
+   - Start comparing immediately (no mode choice for images)
    - Rating adjustments happen in real-time
    - Skip button always available
 
@@ -91,11 +53,27 @@ if (path === '/images' || path === '/images/') {
    - Mode toggle visible on performers page
    - All existing features preserved
 
+## Technical Details
+
+The implementation now always uses full dataset queries:
+
+```javascript
+// Previous sampling logic (REMOVED)
+const useSampling = totalPerformers > 1000;
+const sampleSize = useSampling ? Math.min(500, totalPerformers) : totalPerformers;
+
+// Current implementation
+filter: {
+  per_page: -1,
+  sort: "rating",
+  direction: "DESC"
+}
+```
+
 ## Backward Compatibility
 
 All changes are backward compatible:
-- Works with any size image library (2 to 177,000+)
+- Works with any size library
 - No database schema changes required
 - Maintains existing rating algorithm and ELO calculations
-- Existing image ratings preserved and continue to be updated
-- Performers retain all three modes unchanged
+- Existing ratings preserved and continue to be updated
