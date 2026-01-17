@@ -2724,10 +2724,11 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     // Calculate totals and averages
     const totalMatches = performersWithStats.reduce((sum, p) => sum + p.total_matches, 0);
-    const totalWins = performersWithStats.reduce((sum, p) => sum + p.wins, 0);
-    const totalLosses = performersWithStats.reduce((sum, p) => sum + p.losses, 0);
-    const avgMatches = totalMatches / performers.length;
-    const avgRating = performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performers.length;
+    const performerCount = performers.length;
+    const avgMatches = performerCount > 0 ? (totalMatches / performerCount).toFixed(1) : 0;
+    const avgRating = performerCount > 0 
+      ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
+      : 50;
 
     // Create table rows
     const tableRows = performersWithStats.map(p => {
@@ -2771,28 +2772,28 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
           <div class="hon-stats-summary-item">
             <span class="hon-stats-summary-label">Average Matches/Performer:</span>
-            <span class="hon-stats-summary-value">${avgMatches.toFixed(1)}</span>
+            <span class="hon-stats-summary-value">${avgMatches}</span>
           </div>
           <div class="hon-stats-summary-item">
             <span class="hon-stats-summary-label">Average Rating:</span>
-            <span class="hon-stats-summary-value">${avgRating.toFixed(1)}/100</span>
+            <span class="hon-stats-summary-value">${avgRating}/100</span>
           </div>
         </div>
 
         <div class="hon-stats-table-container">
-          <table class="hon-stats-table">
+          <table class="hon-stats-table" role="table" aria-label="Performer statistics breakdown">
             <thead>
               <tr>
-                <th>Rank</th>
-                <th>Performer</th>
-                <th>Rating</th>
-                <th>Matches</th>
-                <th>Wins</th>
-                <th>Losses</th>
-                <th>Win Rate</th>
-                <th>Streak</th>
-                <th>Best</th>
-                <th>Worst</th>
+                <th scope="col" aria-label="Rank position">Rank</th>
+                <th scope="col" aria-label="Performer name">Performer</th>
+                <th scope="col" aria-label="Current rating">Rating</th>
+                <th scope="col" aria-label="Total matches played">Matches</th>
+                <th scope="col" aria-label="Total wins">Wins</th>
+                <th scope="col" aria-label="Total losses">Losses</th>
+                <th scope="col" aria-label="Win rate percentage">Win Rate</th>
+                <th scope="col" aria-label="Current win or loss streak">Streak</th>
+                <th scope="col" aria-label="Best winning streak">Best</th>
+                <th scope="col" aria-label="Worst losing streak">Worst</th>
               </tr>
             </thead>
             <tbody>
