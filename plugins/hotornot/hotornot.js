@@ -2735,7 +2735,7 @@ async function fetchPerformerCount(performerFilter = {}) {
         rank: idx + 1,
         name: p.name || `Performer #${p.id}`,
         id: p.id,
-        rating: p.rating100 || 50,
+        rating: ((p.rating100 || 50) / 10).toFixed(1),
         ...stats
       };
     });
@@ -2745,13 +2745,14 @@ async function fetchPerformerCount(performerFilter = {}) {
     const performerCount = performers.length;
     const avgMatches = performerCount > 0 ? (totalMatches / performerCount).toFixed(1) : '0.0';
     const avgRating = performerCount > 0 
-      ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
-      : '50.0';
+      ? ((performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount) / 10).toFixed(1) 
+      : '5.0';
 
-    // Calculate rating distribution for bar graph (individual ratings 0-100)
+    // Calculate rating distribution for bar graph (individual ratings 0.1-10.0)
     const ratingBuckets = Array(101).fill(0);
     performersWithStats.forEach(p => {
-      const rating = Math.min(100, Math.max(0, p.rating));
+      const ratingValue = Math.round(parseFloat(p.rating) * 10); // Convert back to 0-100 for bucketing
+      const rating = Math.min(100, Math.max(0, ratingValue));
       ratingBuckets[rating]++;
     });
     
@@ -2761,9 +2762,10 @@ async function fetchPerformerCount(performerFilter = {}) {
       .filter(({ count }) => count > 0)
       .map(({ count, rating }) => {
         const percentage = (count / maxCount) * 100;
+        const displayRating = (rating / 10).toFixed(1); // Convert to decimal for display
         return `
           <div class="hon-bar-container">
-            <div class="hon-bar-label">${rating}</div>
+            <div class="hon-bar-label">${displayRating}</div>
             <div class="hon-bar-wrapper">
               <div class="hon-bar" style="width: ${percentage}%">
                 <span class="hon-bar-count">${count}</span>
@@ -2850,7 +2852,7 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
           <div class="hon-stats-summary-item">
             <span class="hon-stats-summary-label">Average Rating:</span>
-            <span class="hon-stats-summary-value">${avgRating}/100</span>
+            <span class="hon-stats-summary-value">${avgRating}/10</span>
           </div>
         </div>
 
