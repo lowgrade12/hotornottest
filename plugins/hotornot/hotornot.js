@@ -2773,33 +2773,61 @@ async function fetchPerformerCount(performerFilter = {}) {
         `;
       }).join('');
 
-    // Create table rows for leaderboard
-    const tableRows = performersWithStats.map(p => {
-      const winRate = p.total_matches > 0 ? ((p.wins / p.total_matches) * 100).toFixed(1) : 'N/A';
-      const streakDisplay = p.current_streak > 0 
-        ? `<span class="hon-stats-positive">+${p.current_streak}</span>` 
-        : p.current_streak < 0 
-          ? `<span class="hon-stats-negative">${p.current_streak}</span>`
-          : '0';
-      
-      // Escape performer name to prevent XSS
-      const safeName = escapeHtml(p.name);
-      
+    // Group performers by tens (1-10, 11-20, etc.)
+    const groupedPerformers = [];
+    for (let i = 0; i < performersWithStats.length; i += 10) {
+      const group = performersWithStats.slice(i, i + 10);
+      const startRank = i + 1;
+      const endRank = Math.min(i + 10, performersWithStats.length);
+      groupedPerformers.push({ startRank, endRank, performers: group });
+    }
+
+    // Create grouped table sections with expand/collapse
+    const groupedTableHTML = groupedPerformers.map((group, groupIndex) => {
+      const groupRows = group.performers.map(p => {
+        const winRate = p.total_matches > 0 ? ((p.wins / p.total_matches) * 100).toFixed(1) : 'N/A';
+        const streakDisplay = p.current_streak > 0 
+          ? `<span class="hon-stats-positive">+${p.current_streak}</span>` 
+          : p.current_streak < 0 
+            ? `<span class="hon-stats-negative">${p.current_streak}</span>`
+            : '0';
+        
+        // Escape performer name to prevent XSS
+        const safeName = escapeHtml(p.name);
+        
+        return `
+          <tr>
+            <td class="hon-stats-rank">#${p.rank}</td>
+            <td class="hon-stats-name">
+              <a href="/performers/${escapeHtml(p.id)}" target="_blank">${safeName}</a>
+            </td>
+            <td class="hon-stats-rating">${p.rating}</td>
+            <td>${p.total_matches}</td>
+            <td class="hon-stats-positive">${p.wins}</td>
+            <td class="hon-stats-negative">${p.losses}</td>
+            <td>${winRate}${winRate !== 'N/A' ? '%' : ''}</td>
+            <td>${streakDisplay}</td>
+            <td class="hon-stats-positive">${p.best_streak}</td>
+            <td class="hon-stats-negative">${p.worst_streak}</td>
+          </tr>
+        `;
+      }).join('');
+
       return `
-        <tr>
-          <td class="hon-stats-rank">#${p.rank}</td>
-          <td class="hon-stats-name">
-            <a href="/performers/${escapeHtml(p.id)}" target="_blank">${safeName}</a>
-          </td>
-          <td class="hon-stats-rating">${p.rating}</td>
-          <td>${p.total_matches}</td>
-          <td class="hon-stats-positive">${p.wins}</td>
-          <td class="hon-stats-negative">${p.losses}</td>
-          <td>${winRate}${winRate !== 'N/A' ? '%' : ''}</td>
-          <td>${streakDisplay}</td>
-          <td class="hon-stats-positive">${p.best_streak}</td>
-          <td class="hon-stats-negative">${p.worst_streak}</td>
-        </tr>
+        <div class="hon-rank-group">
+          <div class="hon-rank-group-header" data-group="${groupIndex}">
+            <span class="hon-rank-group-toggle">▶</span>
+            <span class="hon-rank-group-title">Ranks ${group.startRank}-${group.endRank}</span>
+            <span class="hon-rank-group-count">(${group.performers.length} performers)</span>
+          </div>
+          <div class="hon-rank-group-content" data-group="${groupIndex}" style="display: none;">
+            <table class="hon-stats-table" role="table">
+              <tbody>
+                ${groupRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
       `;
     }).join('');
 
@@ -2843,7 +2871,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
           <div class="hon-stats-tab-panel" data-panel="leaderboard">
             <div class="hon-stats-table-container">
-              <table class="hon-stats-table" role="table" aria-label="Performer statistics breakdown">
+              <table class="hon-stats-table hon-stats-table-header" role="table" aria-label="Performer statistics breakdown">
                 <thead>
                   <tr>
                     <th scope="col" aria-label="Rank position">Rank</th>
@@ -2858,10 +2886,10 @@ async function fetchPerformerCount(performerFilter = {}) {
                     <th scope="col" aria-label="Worst losing streak">Worst</th>
                   </tr>
                 </thead>
-                <tbody>
-                  ${tableRows}
-                </tbody>
               </table>
+              <div class="hon-rank-groups">
+                ${groupedTableHTML}
+              </div>
             </div>
           </div>
         </div>
@@ -2934,6 +2962,24 @@ async function fetchPerformerCount(performerFilter = {}) {
               panel.classList.remove("active");
             }
           });
+        });
+      });
+
+      // Attach expand/collapse handlers for rank groups
+      const groupHeaders = dialog.querySelectorAll(".hon-rank-group-header");
+      groupHeaders.forEach(header => {
+        header.addEventListener("click", () => {
+          const groupIndex = header.dataset.group;
+          const content = dialog.querySelector(`.hon-rank-group-content[data-group="${groupIndex}"]`);
+          const toggle = header.querySelector(".hon-rank-group-toggle");
+          
+          if (content.style.display === "none") {
+            content.style.display = "block";
+            toggle.textContent = "▼";
+          } else {
+            content.style.display = "none";
+            toggle.textContent = "▶";
+          }
         });
       });
     } catch (error) {
