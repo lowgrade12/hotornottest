@@ -18,7 +18,8 @@
 
   // GraphQL filter modifier constants
   // Array-based modifiers require value_list field for enum-based criterion inputs
-  // (e.g., GenderCriterionInput). Non-enum filters like StringCriterionInput use 'value' field.
+  // (e.g., GenderCriterionInput uses value_list for INCLUDES/EXCLUDES).
+  // HierarchicalMultiCriterionInput types (tags, studios) always use 'value' field regardless of modifier.
   const ARRAY_BASED_MODIFIERS = new Set(['INCLUDES', 'EXCLUDES', 'INCLUDES_ALL']);
 
   // ============================================
