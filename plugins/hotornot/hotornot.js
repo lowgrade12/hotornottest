@@ -1637,12 +1637,9 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // Exclude performers with no image (unless URL filter specifies image_count)
-    if (!filter.image_count) {
-      filter.image_count = {
-        value: 0,
-        modifier: "GREATER_THAN"
-      };
+    // Exclude performers missing default image (unless URL filter specifies is_missing)
+    if (!filter.is_missing) {
+      filter.is_missing = "image";
     }
     
     return filter;
