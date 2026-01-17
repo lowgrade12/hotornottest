@@ -2748,48 +2748,64 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? ((performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount) / 10).toFixed(1) 
       : '5.0';
 
-    // Calculate rating distribution for bar graph (10 rating ranges: 0-1, 1-2, 2-3, ..., 9-10)
-    // Note: Rating 10.0 is included in the 9-10 range
-    const ratingBuckets = Array(10).fill(0);
+    // Calculate rating distribution for bar graph (100 rating ranges: 0.0-0.1, 0.1-0.2, ..., 9.9-10.0)
+    // Create 100 buckets for granular distribution
+    const ratingBuckets = Array(100).fill(0);
     performersWithStats.forEach(p => {
       const ratingValue = parseFloat(p.rating); // Rating is 0.0-10.0
-      const bucketIndex = Math.min(9, Math.floor(ratingValue)); // Bucket 0 = 0-1, Bucket 1 = 1-2, ..., Bucket 9 = 9-10 (includes 10.0)
+      // Map rating to bucket index (0-99)
+      // Rating 10.0 goes into bucket 99 (9.9-10.0)
+      const bucketIndex = Math.min(99, Math.floor(ratingValue * 10));
       ratingBuckets[bucketIndex]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
-    const totalInGroup = ratingBuckets.reduce((sum, count) => sum + count, 0);
     
-    // Create collapsible bar graph group containing all rating ranges
-    // All 10 bars (0-1, 1-2, ..., 9-10) are displayed in a single collapsible section
-    const barsInGroup = ratingBuckets.map((count, bucketIndex) => {
-      const percentage = (count / maxCount) * 100;
-      const displayRange = `${bucketIndex}-${bucketIndex + 1}`;
+    // Group buckets into 10 collapsible groups (0.0-1.0, 1.0-2.0, ..., 9.0-10.0)
+    const barGraphGroups = [];
+    for (let groupIndex = 0; groupIndex < 10; groupIndex++) {
+      const startRating = groupIndex;
+      const endRating = groupIndex + 1;
       
-      return `
-        <div class="hon-bar-container">
-          <div class="hon-bar-label">${displayRange}</div>
-          <div class="hon-bar-wrapper">
-            <div class="hon-bar" style="width: ${percentage}%">
-              <span class="hon-bar-count">${count}</span>
+      // Get buckets for this group (10 buckets per group)
+      const groupBuckets = ratingBuckets.slice(groupIndex * 10, (groupIndex + 1) * 10);
+      const groupTotal = groupBuckets.reduce((sum, count) => sum + count, 0);
+      
+      // Create individual bars for this group
+      const barsInGroup = groupBuckets.map((count, bucketIndexInGroup) => {
+        const bucketIndex = groupIndex * 10 + bucketIndexInGroup;
+        const percentage = (count / maxCount) * 100;
+        const rangeStart = (bucketIndex / 10).toFixed(1);
+        const rangeEnd = ((bucketIndex + 1) / 10).toFixed(1);
+        const displayRange = `${rangeStart}-${rangeEnd}`;
+        
+        return `
+          <div class="hon-bar-container">
+            <div class="hon-bar-label">${displayRange}</div>
+            <div class="hon-bar-wrapper">
+              <div class="hon-bar" style="width: ${percentage}%">
+                <span class="hon-bar-count">${count}</span>
+              </div>
             </div>
           </div>
+        `;
+      }).join('');
+      
+      barGraphGroups.push(`
+        <div class="hon-bar-group">
+          <div class="hon-bar-group-header" data-group="bar-${groupIndex}" role="button" aria-expanded="false" aria-controls="bar-group-${groupIndex}" aria-label="Toggle ratings ${startRating}.0 to ${endRating}.0 group">
+            <span class="hon-group-toggle">▶</span>
+            <span class="hon-bar-group-title">Ratings ${startRating}.0-${endRating}.0</span>
+            <span class="hon-bar-group-count">(${groupTotal} performers)</span>
+          </div>
+          <div class="hon-bar-group-content collapsed" data-group="bar-${groupIndex}" id="bar-group-${groupIndex}">
+            ${barsInGroup}
+          </div>
         </div>
-      `;
-    });
+      `);
+    }
     
-    const barGraphHTML = `
-      <div class="hon-bar-group">
-        <div class="hon-bar-group-header" data-group="bar-0" role="button" aria-expanded="false" aria-controls="bar-group-0" aria-label="Toggle ratings 0 to 10 group">
-          <span class="hon-group-toggle">▶</span>
-          <span class="hon-bar-group-title">Ratings 0.0-10.0</span>
-          <span class="hon-bar-group-count">(${totalInGroup} performers)</span>
-        </div>
-        <div class="hon-bar-group-content collapsed" data-group="bar-0" id="bar-group-0">
-          ${barsInGroup.join('')}
-        </div>
-      </div>
-    `;
+    const barGraphHTML = barGraphGroups.join('');
 
     // Group performers by 250 (1-250, 251-500, etc.)
     const groupedPerformers = [];
