@@ -2748,24 +2748,26 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? ((performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount) / 10).toFixed(1) 
       : '5.0';
 
-    // Calculate rating distribution for bar graph (individual ratings 0.1-10.0)
-    const ratingBuckets = Array(101).fill(0);
+    // Calculate rating distribution for bar graph (grouped by tens: 0-1, 1-2, 2-3, etc.)
+    // Note: Rating 10.0 is included in the 9-10 range
+    const ratingBuckets = Array(10).fill(0);
     performersWithStats.forEach(p => {
-      const ratingValue = Math.round(parseFloat(p.rating) * 10); // Convert back to 0-100 for bucketing
-      const rating = Math.min(100, Math.max(0, ratingValue));
-      ratingBuckets[rating]++;
+      const ratingValue = parseFloat(p.rating); // Rating is 0.0-10.0
+      const bucketIndex = Math.min(9, Math.floor(ratingValue)); // Bucket 0 = 0-1, Bucket 1 = 1-2, ..., Bucket 9 = 9-10 (includes 10.0)
+      ratingBuckets[bucketIndex]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
     const barGraphHTML = ratingBuckets
-      .map((count, rating) => ({ count, rating }))
-      .filter(({ count }) => count > 0)
-      .map(({ count, rating }) => {
+      .map((count, bucketIndex) => {
+        if (count === 0) return null;
         const percentage = (count / maxCount) * 100;
-        const displayRating = (rating / 10).toFixed(1); // Convert to decimal for display
+        const rangeStart = bucketIndex;
+        const rangeEnd = bucketIndex + 1;
+        const displayRange = `${rangeStart}-${rangeEnd}`;
         return `
           <div class="hon-bar-container">
-            <div class="hon-bar-label">${displayRating}</div>
+            <div class="hon-bar-label">${displayRange}</div>
             <div class="hon-bar-wrapper">
               <div class="hon-bar" style="width: ${percentage}%">
                 <span class="hon-bar-count">${count}</span>
@@ -2773,14 +2775,16 @@ async function fetchPerformerCount(performerFilter = {}) {
             </div>
           </div>
         `;
-      }).join('');
+      })
+      .filter(html => html !== null)
+      .join('');
 
-    // Group performers by tens (1-10, 11-20, etc.)
+    // Group performers by 250 (1-250, 251-500, etc.)
     const groupedPerformers = [];
-    for (let i = 0; i < performersWithStats.length; i += 10) {
-      const group = performersWithStats.slice(i, i + 10);
+    for (let i = 0; i < performersWithStats.length; i += 250) {
+      const group = performersWithStats.slice(i, i + 250);
       const startRank = i + 1;
-      const endRank = Math.min(i + 10, performersWithStats.length);
+      const endRank = Math.min(i + 250, performersWithStats.length);
       groupedPerformers.push({ startRank, endRank, performers: group });
     }
 
