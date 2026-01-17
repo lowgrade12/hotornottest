@@ -2914,7 +2914,12 @@ async function fetchPerformerCount(performerFilter = {}) {
                   // Decode URL-encoded data and parse JSON
                   const decodedData = decodeURIComponent(performerData);
                   const performer = JSON.parse(decodedData);
-                  showPerformerStats(performer);
+                  // Validate that performer has required fields
+                  if (performer && performer.id && performer.custom_fields) {
+                    showPerformerStats(performer);
+                  } else {
+                    console.warn("[HotOrNot] Invalid performer data structure");
+                  }
                 } catch (err) {
                   console.error("[HotOrNot] Failed to parse performer data:", err);
                 }
