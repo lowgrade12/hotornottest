@@ -2749,16 +2749,19 @@ async function fetchPerformerCount(performerFilter = {}) {
       : '5.0';
 
     // Calculate rating distribution for bar graph (grouped by tens: 0-1, 1-2, 2-3, etc.)
+    // Note: Rating 10.0 is included in the 9-10 range
     const ratingBuckets = Array(10).fill(0);
     performersWithStats.forEach(p => {
       const ratingValue = parseFloat(p.rating); // Rating is 0.0-10.0
-      const bucketIndex = Math.min(9, Math.floor(ratingValue)); // Bucket 0 = 0-1, Bucket 1 = 1-2, ..., Bucket 9 = 9-10
+      const bucketIndex = Math.min(9, Math.floor(ratingValue)); // Bucket 0 = 0-1, Bucket 1 = 1-2, ..., Bucket 9 = 9-10 (includes 10.0)
       ratingBuckets[bucketIndex]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
     const barGraphHTML = ratingBuckets
-      .map((count, bucketIndex) => {
+      .map((count, bucketIndex) => ({ count, bucketIndex }))
+      .filter(({ count }) => count > 0)
+      .map(({ count, bucketIndex }) => {
         const percentage = (count / maxCount) * 100;
         const rangeStart = bucketIndex;
         const rangeEnd = bucketIndex + 1;
@@ -2774,7 +2777,6 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
         `;
       })
-      .filter(html => html.includes('hon-bar-count">0<') === false) // Filter out empty buckets
       .join('');
 
     // Group performers by 250 (1-250, 251-500, etc.)
