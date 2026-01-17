@@ -2447,7 +2447,7 @@ async function fetchPerformerCount(performerFilter = {}) {
     }
 
     return `
-      <div class="hon-performer-card hon-scene-card" data-performer-id="${performer.id}" data-side="${side}" data-rating="${performer.rating100 || 50}" data-performer-data='${JSON.stringify(performer).replace(/'/g, "&apos;")}'>
+      <div class="hon-performer-card hon-scene-card" data-performer-id="${performer.id}" data-side="${side}" data-rating="${performer.rating100 || 50}" data-performer-data="${encodeURIComponent(JSON.stringify(performer))}">
         <div class="hon-performer-image-container hon-scene-image-container" data-performer-url="/performers/${performer.id}">
           ${imagePath 
             ? `<img class="hon-performer-image hon-scene-image" src="${imagePath}" alt="${name}" loading="lazy" />`
@@ -2911,7 +2911,9 @@ async function fetchPerformerCount(performerFilter = {}) {
               const performerData = performerCard.dataset.performerData;
               if (performerData) {
                 try {
-                  const performer = JSON.parse(performerData);
+                  // Decode URL-encoded data and parse JSON
+                  const decodedData = decodeURIComponent(performerData);
+                  const performer = JSON.parse(decodedData);
                   showPerformerStats(performer);
                 } catch (err) {
                   console.error("[HotOrNot] Failed to parse performer data:", err);
