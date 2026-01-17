@@ -55,7 +55,7 @@ Now, the plugin listens for Stash's `stash:location` events and dynamically upda
 3. Click the 🔥 button
 4. **Expected Result:**
    - Console should show: `[HotOrNot] No URL filters detected`
-   - Plugin should use default filters (excluding males, excluding performers missing default images)
+   - Plugin should use default filters (excluding males, excluding performers without images)
 
 ### Test 5: Images Page (No Filter Support)
 
