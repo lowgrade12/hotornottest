@@ -2745,7 +2745,31 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
       : '50.0';
 
-    // Create table rows
+    // Calculate rating distribution for bar graph (0-10, 10-20, ..., 90-100)
+    const ratingBuckets = Array(10).fill(0);
+    performersWithStats.forEach(p => {
+      const bucketIndex = Math.min(9, Math.floor(p.rating / 10));
+      ratingBuckets[bucketIndex]++;
+    });
+    
+    const maxCount = Math.max(...ratingBuckets, 1);
+    const barGraphHTML = ratingBuckets.map((count, idx) => {
+      const rangeStart = idx * 10;
+      const rangeEnd = (idx + 1) * 10;
+      const percentage = (count / maxCount) * 100;
+      return `
+        <div class="hon-bar-container">
+          <div class="hon-bar-label">${rangeStart}-${rangeEnd}</div>
+          <div class="hon-bar-wrapper">
+            <div class="hon-bar" style="width: ${percentage}%">
+              <span class="hon-bar-count">${count}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Create table rows for leaderboard
     const tableRows = performersWithStats.map(p => {
       const winRate = p.total_matches > 0 ? ((p.wins / p.total_matches) * 100).toFixed(1) : 'N/A';
       const streakDisplay = p.current_streak > 0 
@@ -2798,26 +2822,44 @@ async function fetchPerformerCount(performerFilter = {}) {
           </div>
         </div>
 
-        <div class="hon-stats-table-container">
-          <table class="hon-stats-table" role="table" aria-label="Performer statistics breakdown">
-            <thead>
-              <tr>
-                <th scope="col" aria-label="Rank position">Rank</th>
-                <th scope="col" aria-label="Performer name">Performer</th>
-                <th scope="col" aria-label="Current rating">Rating</th>
-                <th scope="col" aria-label="Total matches played">Matches</th>
-                <th scope="col" aria-label="Total wins">Wins</th>
-                <th scope="col" aria-label="Total losses">Losses</th>
-                <th scope="col" aria-label="Win rate percentage">Win Rate</th>
-                <th scope="col" aria-label="Current win or loss streak">Streak</th>
-                <th scope="col" aria-label="Best winning streak">Best</th>
-                <th scope="col" aria-label="Worst losing streak">Worst</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
+        <div class="hon-stats-tabs">
+          <button class="hon-stats-tab active" data-tab="graph">📊 Distribution</button>
+          <button class="hon-stats-tab" data-tab="leaderboard">📋 Leaderboard</button>
+        </div>
+
+        <div class="hon-stats-tab-content">
+          <div class="hon-stats-tab-panel active" data-panel="graph">
+            <div class="hon-bar-graph">
+              <h3 class="hon-bar-graph-title">Rating Distribution</h3>
+              <div class="hon-bar-graph-content">
+                ${barGraphHTML}
+              </div>
+            </div>
+          </div>
+
+          <div class="hon-stats-tab-panel" data-panel="leaderboard">
+            <div class="hon-stats-table-container">
+              <table class="hon-stats-table" role="table" aria-label="Performer statistics breakdown">
+                <thead>
+                  <tr>
+                    <th scope="col" aria-label="Rank position">Rank</th>
+                    <th scope="col" aria-label="Performer name">Performer</th>
+                    <th scope="col" aria-label="Current rating">Rating</th>
+                    <th scope="col" aria-label="Total matches played">Matches</th>
+                    <th scope="col" aria-label="Total wins">Wins</th>
+                    <th scope="col" aria-label="Total losses">Losses</th>
+                    <th scope="col" aria-label="Win rate percentage">Win Rate</th>
+                    <th scope="col" aria-label="Current win or loss streak">Streak</th>
+                    <th scope="col" aria-label="Best winning streak">Best</th>
+                    <th scope="col" aria-label="Worst losing streak">Worst</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tableRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -2866,6 +2908,29 @@ async function fetchPerformerCount(performerFilter = {}) {
       // Re-attach close handler after updating content
       dialog.querySelector(".hon-modal-close").addEventListener("click", () => {
         statsModal.remove();
+      });
+
+      // Attach tab switching handlers
+      const tabButtons = dialog.querySelectorAll(".hon-stats-tab");
+      const tabPanels = dialog.querySelectorAll(".hon-stats-tab-panel");
+      
+      tabButtons.forEach(button => {
+        button.addEventListener("click", () => {
+          const tabName = button.dataset.tab;
+          
+          // Update active tab button
+          tabButtons.forEach(btn => btn.classList.remove("active"));
+          button.classList.add("active");
+          
+          // Update active tab panel
+          tabPanels.forEach(panel => {
+            if (panel.dataset.panel === tabName) {
+              panel.classList.add("active");
+            } else {
+              panel.classList.remove("active");
+            }
+          });
+        });
       });
     } catch (error) {
       console.error("[HotOrNot] Error loading stats:", error);
