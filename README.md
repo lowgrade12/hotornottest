@@ -12,8 +12,7 @@ A head-to-head comparison plugin that helps you rank performers and images.
   - **Gauntlet** 🎯 – Place a random performer in your rankings. They climb from the bottom, challenging each performer above them until they lose, then settle into their final position.
   - **Champion** 🏆 – Winner stays on. The winning performer keeps battling until they're dethroned. Both performers' ratings and stats are updated, but at a reduced rate (50% of Swiss mode) to maintain more stable rankings while still allowing gradual adjustments.
 - **Swiss Mode for Images:**
-  - Images use Swiss mode exclusively for optimal performance with large libraries (177,000+ images tested).
-  - Intelligent sampling ensures fast comparisons even with massive image collections.
+  - Images use Swiss mode exclusively for optimal performance with large libraries.
 
 ## Overview
 
@@ -119,12 +118,6 @@ In Swiss mode, performer selection uses the `last_match` timestamp to reduce (bu
 - 24+ hours ago: Full probability (~50% chance)
 
 This ensures variety without completely excluding performers, so they can still appear if they're the best match rating-wise.
-
-**Performance Optimization for Large Libraries:**
-- Libraries with ≤1000 performers: Uses full dataset for accurate ranking
-- Libraries with >1000 performers: Uses intelligent sampling (500 performers) for fast performance
-- Recency weighting and rating-based matching work seamlessly in both modes
-- Optimized for libraries with 15,000+ performers
 
 **Technical Details:**
 - See [APPROACH2_IMPLEMENTATION.md](APPROACH2_IMPLEMENTATION.md) for implementation details

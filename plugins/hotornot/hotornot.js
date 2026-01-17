@@ -1807,12 +1807,6 @@ async function fetchPerformerCount(performerFilter = {}) {
   async function fetchSwissPairPerformers() {
     const performerFilter = getPerformerFilter();
     
-    // For large performer pools (>1000), use sampling for performance
-    // For smaller pools, still get all for accurate ranking
-    const totalPerformers = await fetchPerformerCount(performerFilter);
-    const useSampling = totalPerformers > 1000;
-    const sampleSize = useSampling ? Math.min(500, totalPerformers) : totalPerformers;
-    
     const performersQuery = `
       query FindPerformersByRating($performer_filter: PerformerFilterType, $filter: FindFilterType) {
         findPerformers(performer_filter: $performer_filter, filter: $filter) {
@@ -1823,13 +1817,13 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
     `;
 
-    // Get performers - either all or a random sample
+    // Get all performers sorted by rating
     const result = await graphqlQuery(performersQuery, {
       performer_filter: performerFilter,
       filter: {
-        per_page: sampleSize,
-        sort: useSampling ? "random" : "rating",
-        direction: useSampling ? undefined : "DESC"
+        per_page: -1,
+        sort: "rating",
+        direction: "DESC"
       }
     });
 
@@ -1916,8 +1910,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     return { 
       performers: [performer1, performer2], 
-      // When using sampling, ranks are not meaningful (don't represent true position)
-      ranks: useSampling ? [null, null] : [randomIndex + 1, performer2Index + 1] 
+      ranks: [randomIndex + 1, performer2Index + 1] 
     };
   }
 
@@ -2200,12 +2193,6 @@ async function fetchPerformerCount(performerFilter = {}) {
 
   // Swiss mode: fetch two images with similar ratings
   async function fetchSwissPairImages() {
-    // For large image pools (>1000), use sampling for performance
-    // For smaller pools, still get all for accurate ranking
-    const totalImages = await fetchImageCount();
-    const useSampling = totalImages > 1000;
-    const sampleSize = useSampling ? Math.min(500, totalImages) : totalImages;
-    
     const imagesQuery = `
       query FindImagesByRating($filter: FindFilterType) {
         findImages(filter: $filter) {
@@ -2216,12 +2203,12 @@ async function fetchPerformerCount(performerFilter = {}) {
       }
     `;
 
-    // Get images - either all or a random sample
+    // Get all images sorted by rating
     const result = await graphqlQuery(imagesQuery, {
       filter: {
-        per_page: sampleSize,
-        sort: useSampling ? "random" : "rating",
-        direction: useSampling ? undefined : "DESC"
+        per_page: -1,
+        sort: "rating",
+        direction: "DESC"
       }
     });
 
@@ -2265,8 +2252,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     return { 
       images: [image1, image2], 
-      // When using sampling, ranks are not meaningful (don't represent true position)
-      ranks: useSampling ? [null, null] : [randomIndex + 1, image2Index + 1] 
+      ranks: [randomIndex + 1, image2Index + 1] 
     };
   }
 
