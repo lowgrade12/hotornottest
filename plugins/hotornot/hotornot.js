@@ -2676,6 +2676,21 @@ async function fetchPerformerCount(performerFilter = {}) {
   // ============================================
 
   /**
+   * Escape HTML special characters to prevent XSS
+   * @param {string} unsafe - Unsafe string that may contain HTML
+   * @returns {string} HTML-safe string
+   */
+  function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
    * Fetch all performers with stats and ratings
    */
   async function fetchAllPerformerStats() {
@@ -2725,10 +2740,10 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Calculate totals and averages
     const totalMatches = performersWithStats.reduce((sum, p) => sum + p.total_matches, 0);
     const performerCount = performers.length;
-    const avgMatches = performerCount > 0 ? (totalMatches / performerCount).toFixed(1) : 0;
+    const avgMatches = performerCount > 0 ? (totalMatches / performerCount).toFixed(1) : '0.0';
     const avgRating = performerCount > 0 
       ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
-      : 50;
+      : '50.0';
 
     // Create table rows
     const tableRows = performersWithStats.map(p => {
@@ -2739,11 +2754,14 @@ async function fetchPerformerCount(performerFilter = {}) {
           ? `<span class="hon-stats-negative">${p.current_streak}</span>`
           : '0';
       
+      // Escape performer name to prevent XSS
+      const safeName = escapeHtml(p.name);
+      
       return `
         <tr>
           <td class="hon-stats-rank">#${p.rank}</td>
           <td class="hon-stats-name">
-            <a href="/performers/${p.id}" target="_blank">${p.name}</a>
+            <a href="/performers/${escapeHtml(p.id)}" target="_blank">${safeName}</a>
           </td>
           <td class="hon-stats-rating">${p.rating}</td>
           <td>${p.total_matches}</td>
@@ -2854,7 +2872,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       const dialog = statsModal.querySelector(".hon-stats-modal-dialog");
       dialog.innerHTML = `
         <button class="hon-modal-close">✕</button>
-        <div class="hon-stats-error">Error loading stats: ${error.message}</div>
+        <div class="hon-stats-error">Failed to load performer statistics. Please try again later.</div>
       `;
       
       dialog.querySelector(".hon-modal-close").addEventListener("click", () => {
