@@ -1638,11 +1638,10 @@ async function fetchPerformerCount(performerFilter = {}) {
         modifier: "EXCLUDES"
       };
       
-      // Exclude performers with missing images by default
-      // Use image_count filter to exclude performers with 0 images
-      filter.image_count = {
-        value: 0,
-        modifier: "GREATER_THAN"
+      // Exclude performers with missing default image
+      // Use NOT wrapper to invert the is_missing filter
+      filter.NOT = {
+        is_missing: "image"
       };
     }
     
