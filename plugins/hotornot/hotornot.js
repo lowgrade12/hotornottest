@@ -2745,21 +2745,28 @@ async function fetchPerformerCount(performerFilter = {}) {
       ? (performers.reduce((sum, p) => sum + (p.rating100 || 50), 0) / performerCount).toFixed(1) 
       : '50.0';
 
-    // Calculate rating distribution for bar graph (0-10, 10-20, ..., 90-100)
-    const ratingBuckets = Array(10).fill(0);
+    // Calculate rating distribution for bar graph - all tenths (0.1, 0.2, ..., 9.9, 10.0)
+    // rating100 is 1-100, display as 0.1-10.0 by dividing by 10
+    const ratingBuckets = Array(100).fill(0);
     performersWithStats.forEach(p => {
-      const bucketIndex = Math.min(9, Math.floor(p.rating / 10));
+      // Map rating 1-100 to bucket index 0-99
+      // rating 1 -> bucket 0 (0.1)
+      // rating 2 -> bucket 1 (0.2)
+      // ...
+      // rating 100 -> bucket 99 (10.0)
+      const bucketIndex = Math.min(99, Math.max(0, p.rating - 1));
       ratingBuckets[bucketIndex]++;
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
     const barGraphHTML = ratingBuckets.map((count, idx) => {
-      const rangeStart = idx * 10;
-      const rangeEnd = (idx + 1) * 10;
+      // Convert bucket index to display value (0.1-10.0)
+      // idx 0 -> 0.1, idx 1 -> 0.2, ..., idx 99 -> 10.0
+      const ratingValue = ((idx + 1) / 10).toFixed(1);
       const percentage = (count / maxCount) * 100;
       return `
         <div class="hon-bar-container">
-          <div class="hon-bar-label">${rangeStart}-${rangeEnd}</div>
+          <div class="hon-bar-label">${ratingValue}</div>
           <div class="hon-bar-wrapper">
             <div class="hon-bar" style="width: ${percentage}%">
               <span class="hon-bar-count">${count}</span>
