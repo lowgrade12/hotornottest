@@ -1629,25 +1629,21 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     // Apply default filters only when no other filters are selected
     // Check if urlFilter is empty (no user-applied filters)
-    const hasUserFilters = urlFilter && Object.keys(urlFilter).length > 0;
+    const hasUserFilters = Object.keys(urlFilter).length > 0;
     
     if (!hasUserFilters) {
       // Exclude male performers by default
-      if (!filter.gender) {
-        filter.gender = {
-          value_list: ["MALE"],
-          modifier: "EXCLUDES"
-        };
-      }
+      filter.gender = {
+        value_list: ["MALE"],
+        modifier: "EXCLUDES"
+      };
       
       // Exclude performers with missing images by default
       // Use image_count filter to exclude performers with 0 images
-      if (!filter.image_count) {
-        filter.image_count = {
-          value: 0,
-          modifier: "GREATER_THAN"
-        };
-      }
+      filter.image_count = {
+        value: 0,
+        modifier: "GREATER_THAN"
+      };
     }
     
     return filter;
@@ -2761,21 +2757,22 @@ async function fetchPerformerCount(performerFilter = {}) {
     });
     
     const maxCount = Math.max(...ratingBuckets, 1);
-    const barGraphHTML = ratingBuckets.map((count, rating) => {
-      const percentage = (count / maxCount) * 100;
-      // Only show bars with non-zero counts to reduce clutter
-      if (count === 0) return '';
-      return `
-        <div class="hon-bar-container">
-          <div class="hon-bar-label">${rating}</div>
-          <div class="hon-bar-wrapper">
-            <div class="hon-bar" style="width: ${percentage}%">
-              <span class="hon-bar-count">${count}</span>
+    const barGraphHTML = ratingBuckets
+      .map((count, rating) => ({ count, rating }))
+      .filter(({ count }) => count > 0)
+      .map(({ count, rating }) => {
+        const percentage = (count / maxCount) * 100;
+        return `
+          <div class="hon-bar-container">
+            <div class="hon-bar-label">${rating}</div>
+            <div class="hon-bar-wrapper">
+              <div class="hon-bar" style="width: ${percentage}%">
+                <span class="hon-bar-count">${count}</span>
+              </div>
             </div>
           </div>
-        </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
 
     // Create table rows for leaderboard
     const tableRows = performersWithStats.map(p => {
