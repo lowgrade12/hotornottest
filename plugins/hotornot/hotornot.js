@@ -21,6 +21,12 @@
   // Victory threshold: For large libraries, victory is achieved at this rank instead of requiring #1
   // Set to 0 to require defeating everyone (traditional behavior)
   const VICTORY_THRESHOLD = 10;
+  
+  // Champion mode K-factor reduction constants
+  // CHAMPION_K_MAX_REDUCTION: Maximum total K-factor reduction in champion mode (0.25 = 75% reduction at max)
+  // CHAMPION_K_PER_WIN_REDUCTION: K-factor reduction per consecutive win (0.05 = 5% per win)
+  const CHAMPION_K_MAX_REDUCTION = 0.25;
+  const CHAMPION_K_PER_WIN_REDUCTION = 0.05;
 
   // GraphQL filter modifier constants
   // Array-based modifiers require value_list field for enum-based criterion inputs
@@ -1305,15 +1311,17 @@ async function fetchSceneCount() {
   }
 
   /**
-   * Select a random opponent from the closest remaining opponents (legacy behavior).
-   * Kept for backward compatibility and variety in casual play.
+   * Select an opponent for gauntlet/champion mode battles.
+   * Uses binary search for accurate placement when many opponents remain,
+   * falls back to weighted random for variety when few opponents left.
+   * 
    * @param {Array} remainingOpponents - Array of remaining opponents in rank order
-   * @param {number} maxChoices - Maximum number of closest opponents to consider (default: 3)
-   * @returns {Object|null} Randomly selected opponent from the closest options, or null if no opponents
+   * @param {number} [_unused] - Deprecated parameter, kept for backward compatibility
+   * @returns {Object|null} Selected opponent, or null if no opponents
    */
-  function selectRandomOpponent(remainingOpponents, maxChoices = 3) {
-    // Use binary search for more accurate placement
-    return selectOpponentBinarySearch(remainingOpponents);
+  function selectRandomOpponent(remainingOpponents, _unused = 3) {
+    // Binary search with default fallback threshold of 5
+    return selectOpponentBinarySearch(remainingOpponents, 5);
   }
 
   /**
@@ -1475,12 +1483,13 @@ async function fetchSceneCount() {
     // Apply mode-specific multiplier
     // Champion mode: Progressive K-factor reduction based on win streak
     // Longer streaks = more stable ratings (rewards consistent winners)
-    // Base: 50% of Swiss, further reduced by up to 25% based on streak
+    // Base: 50% of Swiss, further reduced based on streak up to configured maximum
     if (mode === "champion") {
-      // Progressive reduction: 50% base, minus 5% per win up to max 75% reduction
-      const streakReduction = Math.min(0.25, gauntletWins * 0.05);
+      const streakReduction = Math.min(CHAMPION_K_MAX_REDUCTION, gauntletWins * CHAMPION_K_PER_WIN_REDUCTION);
       const championMultiplier = 0.5 - streakReduction;
-      return Math.max(4, Math.round(baseKFactor * championMultiplier));
+      // Minimum K-factor is 25% of the base to ensure some rating movement
+      const minKFactor = Math.max(4, Math.round(baseKFactor * 0.25));
+      return Math.max(minKFactor, Math.round(baseKFactor * championMultiplier));
     }
     
     // Swiss and gauntlet modes use full K-factor
@@ -3464,10 +3473,14 @@ async function fetchPerformerCount(performerFilter = {}) {
       if (gauntletFalling && gauntletFallingItem) {
         if (winnerId === gauntletFallingItem.id) {
           // Falling scene won - found their floor!
-          // Interpolate rating between the item they beat and the one that beat them
-          // This places them more accurately instead of just +1 above the defeated opponent
-          const defeaterRating = gauntletDefeaterRating || 100; // Fallback to max if unknown
-          const interpolatedRating = Math.round((loserRating + defeaterRating) / 2);
+          // Interpolate rating between:
+          // - loserRating: the opponent they just beat (below them in ranking)
+          // - defeaterRating: the opponent that originally beat them (above them in ranking)
+          // This places them at the midpoint between their floor and ceiling
+          const fallingItemRating = gauntletFallingItem.rating100 || 50;
+          const defeaterRating = gauntletDefeaterRating || fallingItemRating;
+          const defeatedOpponentRating = loserRating; // The one they just beat
+          const interpolatedRating = Math.round((defeatedOpponentRating + defeaterRating) / 2);
           const finalRating = Math.max(1, Math.min(100, interpolatedRating));
           
           // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
