@@ -35,26 +35,26 @@ const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 40));
 
 #### 2. K-Factor
 ```javascript
-const kFactor = 8;
+// Dynamic K-factor based on match count (USCF/FIDE approach)
+// New performers (0-9 matches): K = 32
+// Moderately established (10-29 matches): K = 24
+// Well-established (30+ matches): K = 16
 ```
 
 **Analysis:**
-- Fixed K-factor of 8 for all items regardless of:
-  - Number of comparisons completed
-  - Current rating level
-  - Rating volatility
+- Dynamic K-factor varies based on match count for accurate rating adjustments
+- Follows the USCF/FIDE approach: higher K for new players, lower for established
 
 **Standard ELO K-Factor Ranges:**
 - FIDE (Chess): 40 for new players, 20 for experienced, 10 for masters
 - Online games: Often 32-64 for new, 16-32 for experienced
-- With 1-100 scale, K=8 is reasonable but could benefit from variation
+- HotOrNot uses: 32 for new, 24 for moderate, 16 for established
 
 **Implications:**
-- Fixed K=8 on 1-100 scale means:
-  - Maximum gain/loss per match ≈ 8 points (when probability is 0 or 1)
-  - Typical gain/loss for evenly matched ≈ 4 points
-  - Takes many comparisons to establish accurate ratings
-  - New items and established items change at same rate
+- Dynamic K-factor on 1-100 scale means:
+  - New performers converge quickly (max ±32 points)
+  - Established ratings remain more stable (max ±16 points)
+  - Better balance between responsiveness and stability
 
 #### 3. Rating Change Calculation
 
@@ -67,7 +67,7 @@ loserLoss = Math.max(1, Math.round(kFactor * expectedWinner));
 **Gauntlet/Champion Mode (only active player adjusts):**
 - Only the champion/falling item's rating changes
 - Defenders stay the same (used as benchmarks)
-- Exception: Rank #1 item loses 1 point when defeated
+- Exception: Rank #1 defender receives full ELO penalty when defeated (not just -1)
 
 **Issues Identified:**
 - `Math.max(1, ...)` forces minimum change of 1 point even when ELO formula suggests 0
