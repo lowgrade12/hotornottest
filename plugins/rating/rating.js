@@ -187,13 +187,15 @@
     ratingInput.placeholder = "--";
 
     // Handle rating input change
-    ratingInput.addEventListener("change", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      let newRating = parseInt(ratingInput.value);
-      if (isNaN(newRating)) {
-        newRating = 0;
+    ratingInput.addEventListener("change", async () => {
+      const inputValue = ratingInput.value.trim();
+      let newRating = parseInt(inputValue);
+      if (inputValue === "" || isNaN(newRating)) {
+        // Restore the current rating if input is empty/invalid
+        const storedRating = container.dataset.currentRating;
+        const currentValue = storedRating !== "" ? parseInt(storedRating) : null;
+        ratingInput.value = currentValue !== null ? currentValue : "";
+        return;
       }
       // Clamp to valid range
       newRating = Math.max(0, Math.min(100, newRating));
@@ -213,7 +215,6 @@
 
     // Prevent card click when interacting with input
     ratingInput.addEventListener("click", (e) => {
-      e.preventDefault();
       e.stopPropagation();
     });
 
