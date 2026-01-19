@@ -68,6 +68,41 @@
     return result.findPerformer ? result.findPerformer.rating100 : null;
   }
 
+  /**
+   * Get multiple performer ratings in a single request
+   * @param {string[]} performerIds - Array of performer IDs
+   * @returns {Promise<Map<string, number|null>>} Map of performer ID to rating
+   */
+  async function getMultiplePerformerRatings(performerIds) {
+    if (performerIds.length === 0) {
+      return new Map();
+    }
+
+    // Build a query that fetches multiple performers at once
+    // GraphQL aliases allow us to query the same field multiple times with different arguments
+    const aliasedQueries = performerIds.map((id, index) => 
+      `p${index}: findPerformer(id: "${id}") { id rating100 }`
+    ).join("\n");
+
+    const query = `query GetMultiplePerformerRatings { ${aliasedQueries} }`;
+
+    try {
+      const result = await graphqlQuery(query, {});
+      const ratings = new Map();
+      
+      performerIds.forEach((id, index) => {
+        const performer = result[`p${index}`];
+        ratings.set(id, performer ? performer.rating100 : null);
+      });
+      
+      return ratings;
+    } catch (err) {
+      console.error("[PerformerRating] Error fetching multiple ratings:", err);
+      // Fallback to returning empty map
+      return new Map();
+    }
+  }
+
   // ============================================
   // RATING UI COMPONENTS
   // ============================================
@@ -198,6 +233,9 @@
       if (value <= hoverValue) {
         star.classList.add("pr-star-preview");
         star.innerHTML = "★";
+      } else {
+        // Reset non-hovered stars to empty state
+        star.innerHTML = "☆";
       }
     });
   }
@@ -290,8 +328,9 @@
   /**
    * Inject rating widget into performer card
    * @param {HTMLElement} card - Performer card element
+   * @param {number|null} rating - Pre-fetched rating value (optional)
    */
-  async function injectRatingWidget(card) {
+  async function injectRatingWidget(card, rating = undefined) {
     if (hasRatingWidget(card)) {
       return;
     }
@@ -303,8 +342,10 @@
     }
 
     try {
-      // Fetch current rating from API
-      const rating = await getPerformerRating(performerId);
+      // Fetch current rating from API if not provided
+      if (rating === undefined) {
+        rating = await getPerformerRating(performerId);
+      }
       
       // Create and inject the widget
       const ratingWidget = createStarRating(rating, performerId);
@@ -359,16 +400,41 @@
       });
     }
 
-    // Process each card (in batches to avoid overwhelming the API)
-    const batchSize = 5;
-    for (let i = 0; i < cards.length; i += batchSize) {
-      const batch = cards.slice(i, i + batchSize);
-      await Promise.all(batch.map(card => {
-        if (!card.dataset.prProcessed) {
-          return injectRatingWidget(card);
-        }
-        return Promise.resolve();
-      }));
+    // Filter to only unprocessed cards
+    const unprocessedCards = cards.filter(card => !card.dataset.prProcessed);
+    if (unprocessedCards.length === 0) {
+      return;
+    }
+
+    // Collect performer IDs for batch query
+    const cardIdMap = new Map(); // performerId -> card
+    for (const card of unprocessedCards) {
+      const performerId = getPerformerIdFromCard(card);
+      if (performerId) {
+        cardIdMap.set(performerId, card);
+      }
+    }
+
+    const performerIds = Array.from(cardIdMap.keys());
+    if (performerIds.length === 0) {
+      return;
+    }
+
+    try {
+      // Fetch all ratings in a single batch query
+      const ratings = await getMultiplePerformerRatings(performerIds);
+      
+      // Inject widgets for each card
+      for (const [performerId, card] of cardIdMap) {
+        const rating = ratings.get(performerId);
+        await injectRatingWidget(card, rating);
+      }
+    } catch (err) {
+      console.error("[PerformerRating] Error processing cards in batch:", err);
+      // Fallback to individual processing
+      for (const card of unprocessedCards) {
+        await injectRatingWidget(card);
+      }
     }
   }
 
@@ -388,6 +454,9 @@
   // ============================================
   // INITIALIZATION
   // ============================================
+
+  // Debounce timeout for mutation observer
+  let processingTimeout = null;
 
   /**
    * Initialize the plugin
@@ -410,8 +479,8 @@
       }
 
       // Debounce processing
-      clearTimeout(observer._timeout);
-      observer._timeout = setTimeout(() => {
+      clearTimeout(processingTimeout);
+      processingTimeout = setTimeout(() => {
         processPerformerCards();
       }, 500);
     });
