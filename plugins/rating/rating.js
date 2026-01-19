@@ -375,8 +375,30 @@
     if (!card) return;
     
     // Find and update any native Stash rating elements on the card
-    // Exclude our own rating widget to avoid conflicts
-    const ratingElements = card.querySelectorAll("[class*='rating']");
+    // Look for common Stash rating element patterns
+    const ratingSelectors = [
+      ".rating-number",
+      ".rating-value",
+      ".rating-display",
+      "[class*='rating'][class*='number']",
+      "[class*='rating'][class*='value']"
+    ];
+    
+    // Try specific selectors first for better performance
+    let ratingElements = [];
+    for (const selector of ratingSelectors) {
+      const found = card.querySelectorAll(selector);
+      if (found.length > 0) {
+        ratingElements = Array.from(found);
+        break;
+      }
+    }
+    
+    // Fallback to broader selector if no specific elements found
+    if (ratingElements.length === 0) {
+      ratingElements = Array.from(card.querySelectorAll("[class*='rating']"));
+    }
+    
     ratingElements.forEach(el => {
       // Skip our plugin's rating widget
       if (el.classList.contains("pr-star-rating") || 
@@ -385,12 +407,18 @@
         return;
       }
       
-      // Update the text content if it contains a rating number
-      const text = el.textContent;
-      const match = text.match(/(\d+)/);
+      // Update the text content if it contains a valid rating number (0-100)
+      const text = el.textContent.trim();
+      // Match numbers that could be ratings (1-3 digits, standalone or at start/end)
+      const match = text.match(/^(\d{1,3})$|^(\d{1,3})\/|\/(\d{1,3})$/);
       if (match) {
-        // Replace the old rating number with the new one
-        el.textContent = text.replace(match[1], rating100.toString());
+        // Get the matched number (from any of the capture groups)
+        const matchedNumber = match[1] || match[2] || match[3];
+        const numericValue = parseInt(matchedNumber, 10);
+        // Only update if the number is in valid rating range
+        if (numericValue >= 0 && numericValue <= 100) {
+          el.textContent = text.replace(matchedNumber, rating100.toString());
+        }
       }
     });
   }
