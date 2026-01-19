@@ -963,16 +963,18 @@ async function fetchSceneCount() {
     // Update champion rank (1-indexed, so +1)
     gauntletChampionRank = championIndex + 1;
     
-    // Find opponents above champion that haven't been defeated
-    const remainingOpponents = scenes.filter((s, idx) => {
+    // Create an index map for O(1) lookups (performance optimization)
+    const sceneIndexMap = new Map(scenes.map((s, idx) => [s.id, idx]));
+    
+    // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
+    const allUndefeatedOpponents = scenes.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
       if (gauntletDefeated.includes(s.id)) return false;
-      // Only scenes ranked higher (lower index) or same rating
-      return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
+      return true;
     });
     
-    // If no opponents left, champion has truly won
-    if (remainingOpponents.length === 0) {
+    // Victory is only when ALL scenes have been defeated
+    if (allUndefeatedOpponents.length === 0) {
       gauntletChampionRank = 1;
       return { 
         scenes: [gauntletChampion], 
@@ -982,9 +984,17 @@ async function fetchSceneCount() {
       };
     }
     
-    // Pick the next highest-ranked remaining opponent with randomization
-    const nextOpponent = selectRandomOpponent(remainingOpponents);
-    const nextOpponentIndex = scenes.findIndex(s => s.id === nextOpponent.id);
+    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
+    // but include all undefeated as potential opponents to ensure we can always find a match
+    const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
+      const opponentIndex = sceneIndexMap.get(s.id);
+      return opponentIndex < championIndex;
+    });
+    
+    // Pick from higher ranked if available, otherwise pick from any undefeated
+    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
+    const nextOpponent = selectRandomOpponent(opponentPool);
+    const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
       scenes: [gauntletChampion, nextOpponent], 
@@ -1052,15 +1062,18 @@ async function fetchSceneCount() {
     
     gauntletChampionRank = championIndex + 1;
     
-    // Find opponents above champion that haven't been defeated
-    const remainingOpponents = scenes.filter((s, idx) => {
+    // Create an index map for O(1) lookups (performance optimization)
+    const sceneIndexMap = new Map(scenes.map((s, idx) => [s.id, idx]));
+    
+    // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
+    const allUndefeatedOpponents = scenes.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
       if (gauntletDefeated.includes(s.id)) return false;
-      return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
+      return true;
     });
     
-    // If no opponents left, champion has won!
-    if (remainingOpponents.length === 0) {
+    // Victory is only when ALL scenes have been defeated
+    if (allUndefeatedOpponents.length === 0) {
       gauntletChampionRank = 1;
       return { 
         scenes: [gauntletChampion], 
@@ -1069,9 +1082,17 @@ async function fetchSceneCount() {
       };
     }
     
-    // Pick the next highest-ranked remaining opponent with randomization
-    const nextOpponent = selectRandomOpponent(remainingOpponents);
-    const nextOpponentIndex = scenes.findIndex(s => s.id === nextOpponent.id);
+    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
+    // but include all undefeated as potential opponents to ensure we can always find a match
+    const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
+      const opponentIndex = sceneIndexMap.get(s.id);
+      return opponentIndex < championIndex;
+    });
+    
+    // Pick from higher ranked if available, otherwise pick from any undefeated
+    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
+    const nextOpponent = selectRandomOpponent(opponentPool);
+    const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
       scenes: [gauntletChampion, nextOpponent], 
@@ -2085,16 +2106,18 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Update champion rank (1-indexed, so +1)
     gauntletChampionRank = championIndex + 1;
     
-    // Find opponents above champion that haven't been defeated
-    const remainingOpponents = performers.filter((s, idx) => {
+    // Create an index map for O(1) lookups (performance optimization)
+    const performerIndexMap = new Map(performers.map((p, idx) => [p.id, idx]));
+    
+    // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
+    const allUndefeatedOpponents = performers.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
       if (gauntletDefeated.includes(s.id)) return false;
-      // Only performers ranked higher (lower index) or same rating
-      return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
+      return true;
     });
     
-    // If no opponents left, champion has truly won
-    if (remainingOpponents.length === 0) {
+    // Victory is only when ALL performers have been defeated
+    if (allUndefeatedOpponents.length === 0) {
       gauntletChampionRank = 1;
       return { 
         performers: [gauntletChampion], 
@@ -2104,9 +2127,17 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // Pick the next highest-ranked remaining opponent with randomization
-    const nextOpponent = selectRandomOpponent(remainingOpponents);
-    const nextOpponentIndex = performers.findIndex(s => s.id === nextOpponent.id);
+    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
+    // but include all undefeated as potential opponents to ensure we can always find a match
+    const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
+      const opponentIndex = performerIndexMap.get(s.id);
+      return opponentIndex < championIndex;
+    });
+    
+    // Pick from higher ranked if available, otherwise pick from any undefeated
+    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
+    const nextOpponent = selectRandomOpponent(opponentPool);
+    const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
       performers: [gauntletChampion, nextOpponent], 
@@ -2176,15 +2207,18 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     gauntletChampionRank = championIndex + 1;
     
-    // Find opponents above champion that haven't been defeated
-    const remainingOpponents = performers.filter((s, idx) => {
+    // Create an index map for O(1) lookups (performance optimization)
+    const performerIndexMap = new Map(performers.map((p, idx) => [p.id, idx]));
+    
+    // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
+    const allUndefeatedOpponents = performers.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
       if (gauntletDefeated.includes(s.id)) return false;
-      return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
+      return true;
     });
     
-    // If no opponents left, champion has won!
-    if (remainingOpponents.length === 0) {
+    // Victory is only when ALL performers have been defeated
+    if (allUndefeatedOpponents.length === 0) {
       gauntletChampionRank = 1;
       return { 
         performers: [gauntletChampion], 
@@ -2193,9 +2227,17 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // Pick the next highest-ranked remaining opponent with randomization
-    const nextOpponent = selectRandomOpponent(remainingOpponents);
-    const nextOpponentIndex = performers.findIndex(s => s.id === nextOpponent.id);
+    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
+    // but include all undefeated as potential opponents to ensure we can always find a match
+    const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
+      const opponentIndex = performerIndexMap.get(s.id);
+      return opponentIndex < championIndex;
+    });
+    
+    // Pick from higher ranked if available, otherwise pick from any undefeated
+    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
+    const nextOpponent = selectRandomOpponent(opponentPool);
+    const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
       performers: [gauntletChampion, nextOpponent], 
@@ -3467,9 +3509,17 @@ async function fetchPerformerCount(performerFilter = {}) {
             freshWinnerPerformer = fetchedWinner || winnerItem;
           }
           
+          // Update falling performer's rating to just below the winner (they lost, so they fall)
+          // Ensure the rating only goes down, never up - a falling performer should only move down in ranking
+          const currentFallingRating = gauntletFallingItem.rating100 || 50;
+          const newFallingRating = Math.max(1, Math.min(currentFallingRating, winnerRating - 1));
+          
           // Track stats for both participants
-          // Track loss for the falling performer
-          updateItemRating(gauntletFallingItem.id, loserRating, freshFallingPerformer, false);
+          // Track loss for the falling performer with their new (lower) rating
+          updateItemRating(gauntletFallingItem.id, newFallingRating, freshFallingPerformer, false);
+          
+          // Update the local object to reflect the new rating
+          gauntletFallingItem.rating100 = newFallingRating;
           
           // Track participation for the winner (defender)
           updateItemRating(winnerId, winnerRating, freshWinnerPerformer, null);
