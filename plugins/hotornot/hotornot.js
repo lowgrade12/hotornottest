@@ -11,10 +11,30 @@
   let gauntletDefeated = []; // IDs of items defeated in current run
   let gauntletFalling = false; // True when champion lost and is finding their floor
   let gauntletFallingItem = null; // The item that's falling to find its position
+  let gauntletFallingFloor = 0; // Bottom boundary for binary search falling (index in sorted array)
+  let gauntletJumpDistance = 0; // Number of ranks to skip on next opponent selection (Dynamic Jump Progression)
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
+  let lastGauntletRatingChange = 0; // Track last rating change for confidence detection
+
+  // ============================================
+  // GAUNTLET MODE CONFIGURATION
+  // ============================================
+  
+  // Dynamic Jump Progression: Skip ranks when decisively beating opponents
+  // Rating difference thresholds for jump tiers
+  const JUMP_THRESHOLD_DECISIVE = 15; // Rating diff >= this = skip 3 ranks
+  const JUMP_THRESHOLD_SOLID = 10; // Rating diff >= this = skip 2 ranks
+  const JUMP_THRESHOLD_NORMAL = 5; // Rating diff >= this = skip 1 rank
+  
+  // Confidence Intervals: Stop gauntlet when rating stabilizes
+  const CONFIDENCE_THRESHOLD = 2; // If rating change <= this, consider "placed"
+  const CONFIDENCE_MIN_MATCHES = 5; // Minimum matches before confidence check applies
+  
+  // Exhaustion Protection: Time-based reset for gauntletDefeated
+  const EXHAUSTION_RESET_HOURS = 168; // 1 week = 168 hours
 
   // GraphQL filter modifier constants
   // Array-based modifiers require value_list field for enum-based criterion inputs
@@ -1182,9 +1202,12 @@ async function fetchSceneCount() {
     // Reset state
     gauntletFalling = false;
     gauntletFallingItem = null;
+    gauntletFallingFloor = 0;
+    gauntletJumpDistance = 0;
     gauntletChampion = null;
     gauntletWins = 0;
     gauntletDefeated = [];
+    lastGauntletRatingChange = 0;
     
     // Attach button handler
     const newBtn = comparisonArea.querySelector("#hon-new-gauntlet");
@@ -1266,18 +1289,133 @@ async function fetchSceneCount() {
   // ============================================
 
   /**
-   * Select a random opponent from the closest remaining opponents
-   * Assumes remainingOpponents array is in rank order (best first, closest to champion last)
-   * @param {Array} remainingOpponents - Array of remaining opponents in rank order
+   * Select an opponent for the champion to face, applying jump progression if applicable.
+   * When the champion won decisively against the previous opponent, they can skip ahead.
+   * @param {Array} remainingOpponents - Array of remaining opponents in rank order (best first)
    * @param {number} maxChoices - Maximum number of closest opponents to consider (default: 3)
-   * @returns {Object|null} Randomly selected opponent from the closest options, or null if no opponents
+   * @param {number} jumpDistance - Number of additional ranks to skip (from calculateJumpDistance)
+   * @returns {Object|null} Selected opponent, or null if no opponents
    */
-  function selectRandomOpponent(remainingOpponents, maxChoices = 3) {
+  function selectRandomOpponent(remainingOpponents, maxChoices = 3, jumpDistance = 0) {
     if (remainingOpponents.length === 0) return null;
     
-    // Get up to maxChoices closest opponents from the end of the array
-    const closestOpponents = remainingOpponents.slice(-maxChoices);
+    // Apply jump progression: skip ahead to face tougher opponents
+    // Jump distance determines how many positions to skip from the closest opponents
+    const effectiveStartIndex = Math.min(jumpDistance, remainingOpponents.length - 1);
+    
+    // Get opponents from the jump position, up to maxChoices
+    const adjustedOpponents = remainingOpponents.slice(0, remainingOpponents.length - effectiveStartIndex);
+    
+    if (adjustedOpponents.length === 0) {
+      // Fallback to the best remaining opponent if jump overshoots
+      return remainingOpponents[0];
+    }
+    
+    // Get up to maxChoices closest opponents from the adjusted end of the array
+    const closestOpponents = adjustedOpponents.slice(-maxChoices);
     return closestOpponents[Math.floor(Math.random() * closestOpponents.length)];
+  }
+
+  /**
+   * Calculate how many ranks to jump based on rating difference (Dynamic Jump Progression)
+   * When a challenger beats a defender decisively, they can skip ranks to face harder opponents sooner.
+   * @param {number} winnerRating - Winner's current rating
+   * @param {number} loserRating - Loser's rating (the defender who was beaten)
+   * @returns {number} Number of additional ranks to skip (0-3)
+   */
+  function calculateJumpDistance(winnerRating, loserRating) {
+    // Only apply jump logic when the winner had a significantly lower rating
+    // (underdog victory scenario)
+    const ratingDiff = loserRating - winnerRating;
+    
+    if (ratingDiff >= JUMP_THRESHOLD_DECISIVE) {
+      return 3; // Decisive victory against much higher rated opponent
+    } else if (ratingDiff >= JUMP_THRESHOLD_SOLID) {
+      return 2; // Solid victory against higher rated opponent
+    } else if (ratingDiff >= JUMP_THRESHOLD_NORMAL) {
+      return 1; // Normal victory against slightly higher rated opponent
+    }
+    
+    return 0; // Expected victory or close match, no jump
+  }
+
+  /**
+   * Check if a performer should be allowed to re-challenge based on time (Exhaustion Protection)
+   * Performers can re-challenge after EXHAUSTION_RESET_HOURS have passed since they were defeated.
+   * @param {string} performerId - ID of the performer to check
+   * @param {Object} performer - Performer object with custom_fields (optional, for last_match check)
+   * @returns {boolean} True if the performer can re-challenge
+   */
+  function canRechallenge(performerId, performer = null) {
+    // If not in defeated list, they can challenge
+    if (!gauntletDefeated.includes(performerId)) {
+      return true;
+    }
+    
+    // Check if enough time has passed since their last match
+    if (performer) {
+      const stats = parsePerformerEloData(performer);
+      if (stats.last_match) {
+        try {
+          const lastMatchTime = new Date(stats.last_match).getTime();
+          const hoursSinceMatch = (Date.now() - lastMatchTime) / (1000 * 60 * 60);
+          
+          // If enough time has passed, allow re-challenge
+          if (hoursSinceMatch >= EXHAUSTION_RESET_HOURS) {
+            // Remove from defeated list since they can now re-challenge
+            gauntletDefeated = gauntletDefeated.filter(id => id !== performerId);
+            return true;
+          }
+        } catch (e) {
+          // If date parsing fails, keep them in defeated list
+          console.warn(`[HotOrNot] Failed to parse last_match for exhaustion check:`, e);
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if the gauntlet run should end due to rating stabilization (Confidence Intervals)
+   * If the rating change has been consistently low, the performer is considered "placed".
+   * @param {number} ratingChange - The rating change from the last match
+   * @param {Object} performer - Performer object to check match count
+   * @returns {boolean} True if the performer should be placed (rating has stabilized)
+   */
+  function shouldPlaceDueToConfidence(ratingChange, performer) {
+    const stats = parsePerformerEloData(performer);
+    
+    // Don't apply confidence check until minimum matches are reached
+    if (stats.total_matches < CONFIDENCE_MIN_MATCHES) {
+      return false;
+    }
+    
+    // Track the last rating change
+    lastGauntletRatingChange = Math.abs(ratingChange);
+    
+    // If the rating change is at or below the threshold, consider placed
+    return Math.abs(ratingChange) <= CONFIDENCE_THRESHOLD;
+  }
+
+  /**
+   * Calculate the next opponent index using binary search approach for falling mode
+   * @param {number} currentIndex - Current position in the sorted array
+   * @param {number} floorIndex - Bottom boundary (last known "can beat" position)
+   * @param {number} totalItems - Total number of items
+   * @returns {number} Index of the next opponent to face
+   */
+  function calculateBinarySearchOpponentIndex(currentIndex, floorIndex, totalItems) {
+    // Binary search: pick opponent halfway between current position and floor
+    const midpoint = Math.floor((currentIndex + floorIndex) / 2);
+    
+    // Ensure we don't pick ourselves and stay within bounds
+    if (midpoint === currentIndex) {
+      // We're at the limit, pick the next one below
+      return Math.min(currentIndex + 1, totalItems - 1);
+    }
+    
+    return midpoint;
   }
 
   /**
@@ -2007,18 +2145,51 @@ async function fetchPerformerCount(performerFilter = {}) {
       return { performers: await fetchRandomPerformers(2), ranks: [null, null], isVictory: false, isFalling: false };
     }
 
-    // Handle falling mode - find next opponent BELOW to test against
+    // Handle falling mode - find next opponent BELOW using binary search approach
     if (gauntletFalling && gauntletFallingItem) {
       const fallingIndex = performers.findIndex(s => s.id === gauntletFallingItem.id);
       
-      // Find opponents below (higher index) that haven't been tested
-      const belowOpponents = performers.filter((s, idx) => {
-        if (s.id === gauntletFallingItem.id) return false;
-        if (gauntletDefeated.includes(s.id)) return false;
-        return idx > fallingIndex; // Below in ranking
-      });
+      // Initialize floor boundary if not set (start at bottom)
+      if (gauntletFallingFloor === 0) {
+        gauntletFallingFloor = performers.length - 1;
+      }
       
-      if (belowOpponents.length === 0) {
+      // Calculate binary search target (halfway between current position and floor)
+      const targetIndex = calculateBinarySearchOpponentIndex(fallingIndex, gauntletFallingFloor, performers.length);
+      
+      // Find the opponent at or near the target index (excluding already tested)
+      // Search from target towards floor for an available opponent
+      let nextBelow = null;
+      let nextBelowIndex = -1;
+      
+      for (let i = targetIndex; i <= gauntletFallingFloor; i++) {
+        const candidate = performers[i];
+        if (candidate && 
+            candidate.id !== gauntletFallingItem.id && 
+            !gauntletDefeated.includes(candidate.id) &&
+            canRechallenge(candidate.id, candidate)) {
+          nextBelow = candidate;
+          nextBelowIndex = i;
+          break;
+        }
+      }
+      
+      // If no opponent found towards floor, try upwards from target
+      if (!nextBelow) {
+        for (let i = targetIndex - 1; i > fallingIndex; i--) {
+          const candidate = performers[i];
+          if (candidate && 
+              candidate.id !== gauntletFallingItem.id && 
+              !gauntletDefeated.includes(candidate.id) &&
+              canRechallenge(candidate.id, candidate)) {
+            nextBelow = candidate;
+            nextBelowIndex = i;
+            break;
+          }
+        }
+      }
+      
+      if (!nextBelow) {
         // Hit the bottom - they're the lowest, place them here
         const finalRank = performers.length;
         const finalRating = 1; // Lowest rating
@@ -2034,10 +2205,6 @@ async function fetchPerformerCount(performerFilter = {}) {
           placementRating: finalRating
         };
       } else {
-        // Get next opponent below (first one, closest to falling performer)
-        const nextBelow = belowOpponents[0];
-        const nextBelowIndex = performers.findIndex(s => s.id === nextBelow.id);
-        
         // Update the falling performer's rank for display
         gauntletChampionRank = fallingIndex + 1;
         
@@ -2056,6 +2223,9 @@ async function fetchPerformerCount(performerFilter = {}) {
       gauntletDefeated = [];
       gauntletFalling = false;
       gauntletFallingItem = null;
+      gauntletFallingFloor = 0; // Reset binary search floor
+      gauntletJumpDistance = 0; // Reset jump progression
+      lastGauntletRatingChange = 0; // Reset confidence tracking
       
       // Pick random performer as challenger
       const randomIndex = Math.floor(Math.random() * performers.length);
@@ -2086,9 +2256,11 @@ async function fetchPerformerCount(performerFilter = {}) {
     gauntletChampionRank = championIndex + 1;
     
     // Find opponents above champion that haven't been defeated
+    // Apply exhaustion protection - allow re-challenges after time reset
     const remainingOpponents = performers.filter((s, idx) => {
       if (s.id === gauntletChampion.id) return false;
-      if (gauntletDefeated.includes(s.id)) return false;
+      // Use canRechallenge for exhaustion protection (time-based reset)
+      if (!canRechallenge(s.id, s)) return false;
       // Only performers ranked higher (lower index) or same rating
       return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
     });
@@ -2104,9 +2276,13 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // Pick the next highest-ranked remaining opponent with randomization
-    const nextOpponent = selectRandomOpponent(remainingOpponents);
+    // Pick the next highest-ranked remaining opponent with jump progression
+    // gauntletJumpDistance is set by the previous match outcome
+    const nextOpponent = selectRandomOpponent(remainingOpponents, 3, gauntletJumpDistance);
     const nextOpponentIndex = performers.findIndex(s => s.id === nextOpponent.id);
+    
+    // Reset jump distance after using it (it only applies to the next match)
+    gauntletJumpDistance = 0;
     
     return { 
       performers: [gauntletChampion, nextOpponent], 
@@ -3232,6 +3408,9 @@ async function fetchPerformerCount(performerFilter = {}) {
               gauntletDefeated = [];
               gauntletFalling = false;
               gauntletFallingItem = null;
+              gauntletFallingFloor = 0;
+              gauntletJumpDistance = 0;
+              lastGauntletRatingChange = 0;
               // Show the actions again
               if (actionsEl) actionsEl.style.display = "";
               loadNewPair();
@@ -3268,6 +3447,9 @@ async function fetchPerformerCount(performerFilter = {}) {
               gauntletWins = 0;
               gauntletChampionRank = 0;
               gauntletDefeated = [];
+              gauntletFallingFloor = 0;
+              gauntletJumpDistance = 0;
+              lastGauntletRatingChange = 0;
               if (actionsEl) actionsEl.style.display = "";
               loadNewPair();
             });
@@ -3451,8 +3633,20 @@ async function fetchPerformerCount(performerFilter = {}) {
           }, 800);
           return;
         } else {
-          // Falling scene lost again - keep falling
+          // Falling scene lost again - keep falling with binary search
           gauntletDefeated.push(winnerId);
+          
+          // Update binary search floor: we lost to winner, so floor moves up to winner's position
+          // (we know we can't beat anyone at or above the winner)
+          const winnerIndex = currentRanks.right === (loserId === currentPair.left.id ? currentRanks.left : currentRanks.right) 
+            ? currentRanks.left - 1 
+            : currentRanks.right - 1;
+          // Actually, we need to get the winner's rank index
+          const winnerRank = winnerId === currentPair.left.id ? currentRanks.left : currentRanks.right;
+          if (winnerRank) {
+            // Floor is the winner's index (0-based), meaning we search below them
+            gauntletFallingFloor = Math.max(gauntletFallingFloor, winnerRank);
+          }
           
           // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
           let freshFallingPerformer = gauntletFallingItem;
@@ -3495,22 +3689,47 @@ async function fetchPerformerCount(performerFilter = {}) {
         gauntletDefeated.push(loserId);
         gauntletWins++;
         gauntletChampion.rating100 = newWinnerRating;
+        
+        // Dynamic Jump Progression: Calculate how many ranks to skip for the next opponent
+        gauntletJumpDistance = calculateJumpDistance(winnerRating, loserRating);
+        if (gauntletJumpDistance > 0) {
+          console.log(`[HotOrNot] Jump progression: Will skip ${gauntletJumpDistance} additional ranks due to decisive victory`);
+        }
+        
+        // Confidence Intervals: Check if rating has stabilized
+        if (shouldPlaceDueToConfidence(winnerChange, gauntletChampion)) {
+          console.log(`[HotOrNot] Confidence threshold reached: Rating stabilized with change of ${winnerChange}`);
+          // Show placement screen instead of continuing
+          const championRank = currentRanks.left && winnerId === currentPair.left.id ? currentRanks.left : currentRanks.right;
+          
+          // Visual feedback
+          winnerCard.classList.add("hon-winner");
+          if (loserCard) loserCard.classList.add("hon-loser");
+          
+          setTimeout(() => {
+            showPlacementScreen(gauntletChampion, championRank || gauntletChampionRank, newWinnerRating);
+          }, 800);
+          return;
+        }
       } else if (gauntletChampion && winnerId !== gauntletChampion.id) {
         // Champion LOST - start falling to find their floor
         gauntletFalling = true;
         gauntletFallingItem = loserItem; // The old champion is now falling
+        gauntletFallingFloor = totalItemsCount - 1; // Reset binary search floor to bottom
         gauntletDefeated = [winnerId]; // They lost to this scene
         
         // Winner becomes the new climbing champion
         gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletWins = 1;
+        lastGauntletRatingChange = 0; // Reset confidence tracking for new champion
       } else {
         // No champion yet - winner becomes champion
         gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
         gauntletDefeated = [loserId];
         gauntletWins = 1;
+        lastGauntletRatingChange = 0; // Reset confidence tracking
       }
       
       // Visual feedback with animations
@@ -3728,6 +3947,9 @@ function addFloatingButton() {
           gauntletDefeated = [];
           gauntletFalling = false;
           gauntletFallingItem = null;
+          gauntletFallingFloor = 0;
+          gauntletJumpDistance = 0;
+          lastGauntletRatingChange = 0;
           
           // Update button states
           modal.querySelectorAll(".hon-mode-btn").forEach((b) => {
@@ -3766,6 +3988,9 @@ function addFloatingButton() {
           gauntletDefeated = [];
           gauntletFalling = false;
           gauntletFallingItem = null;
+          gauntletFallingFloor = 0;
+          gauntletJumpDistance = 0;
+          lastGauntletRatingChange = 0;
         }
         loadNewPair();
       });
@@ -3826,6 +4051,9 @@ function addFloatingButton() {
             gauntletDefeated = [];
             gauntletFalling = false;
             gauntletFallingItem = null;
+            gauntletFallingFloor = 0;
+            gauntletJumpDistance = 0;
+            lastGauntletRatingChange = 0;
           }
           loadNewPair();
         }
