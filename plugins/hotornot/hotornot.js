@@ -963,6 +963,9 @@ async function fetchSceneCount() {
     // Update champion rank (1-indexed, so +1)
     gauntletChampionRank = championIndex + 1;
     
+    // Create an index map for O(1) lookups (performance optimization)
+    const sceneIndexMap = new Map(scenes.map((s, idx) => [s.id, idx]));
+    
     // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
     const allUndefeatedOpponents = scenes.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
@@ -984,14 +987,14 @@ async function fetchSceneCount() {
     // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
     // but include all undefeated as potential opponents to ensure we can always find a match
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
-      const opponentIndex = scenes.findIndex(p => p.id === s.id);
+      const opponentIndex = sceneIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
     // Pick from higher ranked if available, otherwise pick from any undefeated
     const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
     const nextOpponent = selectRandomOpponent(opponentPool);
-    const nextOpponentIndex = scenes.findIndex(s => s.id === nextOpponent.id);
+    const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
       scenes: [gauntletChampion, nextOpponent], 
@@ -1059,6 +1062,9 @@ async function fetchSceneCount() {
     
     gauntletChampionRank = championIndex + 1;
     
+    // Create an index map for O(1) lookups (performance optimization)
+    const sceneIndexMap = new Map(scenes.map((s, idx) => [s.id, idx]));
+    
     // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
     const allUndefeatedOpponents = scenes.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
@@ -1079,14 +1085,14 @@ async function fetchSceneCount() {
     // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
     // but include all undefeated as potential opponents to ensure we can always find a match
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
-      const opponentIndex = scenes.findIndex(p => p.id === s.id);
+      const opponentIndex = sceneIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
     // Pick from higher ranked if available, otherwise pick from any undefeated
     const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
     const nextOpponent = selectRandomOpponent(opponentPool);
-    const nextOpponentIndex = scenes.findIndex(s => s.id === nextOpponent.id);
+    const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
       scenes: [gauntletChampion, nextOpponent], 
@@ -2100,6 +2106,9 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Update champion rank (1-indexed, so +1)
     gauntletChampionRank = championIndex + 1;
     
+    // Create an index map for O(1) lookups (performance optimization)
+    const performerIndexMap = new Map(performers.map((p, idx) => [p.id, idx]));
+    
     // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
     const allUndefeatedOpponents = performers.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
@@ -2121,14 +2130,14 @@ async function fetchPerformerCount(performerFilter = {}) {
     // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
     // but include all undefeated as potential opponents to ensure we can always find a match
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
-      const opponentIndex = performers.findIndex(p => p.id === s.id);
+      const opponentIndex = performerIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
     // Pick from higher ranked if available, otherwise pick from any undefeated
     const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
     const nextOpponent = selectRandomOpponent(opponentPool);
-    const nextOpponentIndex = performers.findIndex(s => s.id === nextOpponent.id);
+    const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
       performers: [gauntletChampion, nextOpponent], 
@@ -2198,6 +2207,9 @@ async function fetchPerformerCount(performerFilter = {}) {
     
     gauntletChampionRank = championIndex + 1;
     
+    // Create an index map for O(1) lookups (performance optimization)
+    const performerIndexMap = new Map(performers.map((p, idx) => [p.id, idx]));
+    
     // Find ALL undefeated opponents (anyone the champion hasn't beaten yet)
     const allUndefeatedOpponents = performers.filter((s) => {
       if (s.id === gauntletChampion.id) return false;
@@ -2218,14 +2230,14 @@ async function fetchPerformerCount(performerFilter = {}) {
     // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
     // but include all undefeated as potential opponents to ensure we can always find a match
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
-      const opponentIndex = performers.findIndex(p => p.id === s.id);
+      const opponentIndex = performerIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
     // Pick from higher ranked if available, otherwise pick from any undefeated
     const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
     const nextOpponent = selectRandomOpponent(opponentPool);
-    const nextOpponentIndex = performers.findIndex(s => s.id === nextOpponent.id);
+    const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
       performers: [gauntletChampion, nextOpponent], 
