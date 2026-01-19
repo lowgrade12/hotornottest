@@ -432,10 +432,9 @@
     // Walk up the DOM tree to find the performer card
     let element = container.parentElement;
     while (element) {
-      // Check for common card class names
+      // Check for common card class names and semantic patterns
       if (element.classList.contains("performer-card") ||
           element.classList.contains("card") ||
-          element.dataset.prProcessed === "true" ||
           element.querySelector("a[href*='/performers/']")) {
         return element;
       }
