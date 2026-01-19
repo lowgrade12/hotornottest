@@ -14,7 +14,7 @@
   let gauntletDefeaterRating = null; // Rating of the item that defeated the falling item (for interpolation)
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
-  let battleType = "performers"; // HotOrNot is performers-only
+  let battleType = "performers"; // Default to performers (images also supported in Swiss mode)
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
 
   // Configuration constants
