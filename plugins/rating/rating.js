@@ -156,6 +156,9 @@
           container.dataset.currentRating = newRating100;
           updateStarDisplay(container, newRating100);
           showRatingFeedback(container, newRating100);
+          // Update any native Stash rating displays on the card
+          const parentCard = findParentCard(container);
+          updateNativeRatingDisplay(parentCard, newRating100);
         } catch (err) {
           console.error("[PerformerRating] Failed to update rating:", err);
           showRatingError(container);
@@ -207,6 +210,9 @@
         container.dataset.currentRating = newRating;
         updateStarDisplay(container, newRating);
         showRatingFeedback(container, newRating);
+        // Update any native Stash rating displays on the card
+        const parentCard = findParentCard(container);
+        updateNativeRatingDisplay(parentCard, newRating);
       } catch (err) {
         console.error("[PerformerRating] Failed to update rating:", err);
         showRatingError(container);
@@ -355,6 +361,93 @@
       if (match) {
         return parseInt(match[1]);
       }
+    }
+    return null;
+  }
+
+  /**
+   * Update Stash's native rating display elements on the card
+   * This ensures all rating displays are synchronized after a rating change
+   * @param {HTMLElement} card - Performer card element
+   * @param {number} rating100 - New rating value (0-100)
+   */
+  function updateNativeRatingDisplay(card, rating100) {
+    if (!card) return;
+    
+    // Find and update any native Stash rating elements on the card
+    // Look for common Stash rating element patterns
+    const ratingSelectors = [
+      ".rating-number",
+      ".rating-value",
+      ".rating-display",
+      "[class*='rating'][class*='number']",
+      "[class*='rating'][class*='value']"
+    ];
+    
+    // Try specific selectors first for better performance
+    let ratingElements = [];
+    for (const selector of ratingSelectors) {
+      const found = card.querySelectorAll(selector);
+      if (found.length > 0) {
+        ratingElements = Array.from(found);
+        break;
+      }
+    }
+    
+    // Fallback to broader selector if no specific elements found
+    if (ratingElements.length === 0) {
+      ratingElements = Array.from(card.querySelectorAll("[class*='rating']"));
+    }
+    
+    ratingElements.forEach(el => {
+      // Skip our plugin's rating widget
+      if (el.classList.contains("pr-star-rating") || 
+          el.classList.contains("pr-rating-input") ||
+          el.closest(".pr-star-rating")) {
+        return;
+      }
+      
+      // Update the text content if it contains a valid rating number (0-100)
+      const text = el.textContent.trim();
+      // Match numbers that could be ratings (1-3 digits, standalone or at start/end)
+      const match = text.match(/^(\d{1,3})$|^(\d{1,3})\/|\/(\d{1,3})$/);
+      if (match) {
+        // Get the matched number (from any of the capture groups)
+        const matchedNumber = match[1] || match[2] || match[3];
+        const numericValue = parseInt(matchedNumber, 10);
+        // Only update if the number is in valid rating range
+        if (numericValue >= 0 && numericValue <= 100) {
+          el.textContent = text.replace(matchedNumber, rating100.toString());
+        }
+      }
+    });
+  }
+
+  /**
+   * Find the parent card element containing the rating widget
+   * @param {HTMLElement} container - The rating widget container
+   * @returns {HTMLElement|null} The parent card element or null
+   */
+  function findParentCard(container) {
+    // Walk up the DOM tree to find the performer card
+    let element = container.parentElement;
+    while (element) {
+      // Check for common card class names first (fast)
+      if (element.classList.contains("performer-card") ||
+          element.classList.contains("card")) {
+        return element;
+      }
+      // Check for direct link as child (faster than querySelector)
+      const children = element.children;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.tagName === "A" && 
+            child.href && 
+            child.href.includes("/performers/")) {
+          return element;
+        }
+      }
+      element = element.parentElement;
     }
     return null;
   }
