@@ -3510,8 +3510,9 @@ async function fetchPerformerCount(performerFilter = {}) {
           }
           
           // Update falling performer's rating to just below the winner (they lost, so they fall)
-          // This ensures the ranking reflects their actual position after losing
-          const newFallingRating = Math.max(1, winnerRating - 1);
+          // Ensure the rating only goes down, never up - a falling performer should only move down in ranking
+          const currentFallingRating = gauntletFallingItem.rating100 || 50;
+          const newFallingRating = Math.max(1, Math.min(currentFallingRating, winnerRating - 1));
           
           // Track stats for both participants
           // Track loss for the falling performer with their new (lower) rating
