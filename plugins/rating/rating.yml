@@ -1,0 +1,9 @@
+name: PerformerRating
+description: Displays and allows editing of performer ratings directly on the main performer page
+version: 1.0.0
+url: https://github.com/lowgrade12/hotornottest
+ui:
+  javascript:
+    - rating.js
+  css:
+    - rating.css
