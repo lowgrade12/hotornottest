@@ -3638,10 +3638,6 @@ async function fetchPerformerCount(performerFilter = {}) {
           
           // Update binary search floor: we lost to winner, so floor moves up to winner's position
           // (we know we can't beat anyone at or above the winner)
-          const winnerIndex = currentRanks.right === (loserId === currentPair.left.id ? currentRanks.left : currentRanks.right) 
-            ? currentRanks.left - 1 
-            : currentRanks.right - 1;
-          // Actually, we need to get the winner's rank index
           const winnerRank = winnerId === currentPair.left.id ? currentRanks.left : currentRanks.right;
           if (winnerRank) {
             // Floor is the winner's index (0-based), meaning we search below them
