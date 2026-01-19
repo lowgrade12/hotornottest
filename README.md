@@ -48,17 +48,22 @@ A plugin for [Stash](https://stashapp.cc/) that uses an ELO-style rating system 
 - Losing to lower-rated items costs more points
 
 **Adaptive K-Factor:**
-- New performers (<10 matches): K=16 for fast initial positioning
-- Moderately established (10-30 matches): K=12 for balanced adjustments
-- Well-established (>50 matches): K=8 for stable rankings
+- New performers (<10 matches): K=32 for fast initial positioning
+- Moderately established (10-30 matches): K=24 for balanced adjustments
+- Well-established (30+ matches): K=16 for stable rankings
 
 **Statistics Tracking:**
 Tracks wins, losses, streaks, win rates, and match history in the `hotornot_stats` custom field.
 
 **Mode-Specific Behavior:**
 - **Swiss**: Full stats and normal rating changes for both participants
-- **Gauntlet**: Full stats for active challenger; defenders get participation tracking only
-- **Champion**: Full stats for both, but 50% reduced K-factor for gradual evolution
+- **Gauntlet**: Full stats for active challenger; defenders get participation tracking only. Uses binary search for efficient placement.
+- **Champion**: Full stats for both, with progressive K-factor reduction (50% base, further reduced by win streak for stability)
+
+**Gauntlet Mode Improvements:**
+- Binary search opponent selection for more accurate ranking placement
+- Interpolated rating calculation when finding floor (averages defeater and defeated ratings)
+- Victory threshold: Reach top 10 to win (configurable, avoids defeating entire library)
 
 **Recency Weighting (Swiss Mode):**
 Recently matched performers are less likely to reappear:

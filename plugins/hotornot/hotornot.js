@@ -8,13 +8,25 @@
   let gauntletChampion = null; // The item currently on a winning streak (scene or performer)
   let gauntletWins = 0; // Current win streak
   let gauntletChampionRank = 0; // Current rank position (1 = top)
-  let gauntletDefeated = []; // IDs of items defeated in current run
+  let gauntletDefeated = new Set(); // IDs of items defeated in current run (Set for O(1) lookup)
   let gauntletFalling = false; // True when champion lost and is finding their floor
   let gauntletFallingItem = null; // The item that's falling to find its position
+  let gauntletDefeaterRating = null; // Rating of the item that defeated the falling item (for interpolation)
   let totalItemsCount = 0; // Total items for position display
   let disableChoice = false; // Track when inputs should be disabled to prevent multiple events
   let battleType = "performers"; // HotOrNot is performers-only
   let cachedUrlFilter = null; // Cache the URL filter when modal is opened
+
+  // Configuration constants
+  // Victory threshold: For large libraries, victory is achieved at this rank instead of requiring #1
+  // Set to 0 to require defeating everyone (traditional behavior)
+  const VICTORY_THRESHOLD = 10;
+  
+  // Champion mode K-factor reduction constants
+  // CHAMPION_K_MAX_REDUCTION: Maximum total K-factor reduction in champion mode (0.25 = 75% reduction at max)
+  // CHAMPION_K_PER_WIN_REDUCTION: K-factor reduction per consecutive win (0.05 = 5% per win)
+  const CHAMPION_K_MAX_REDUCTION = 0.25;
+  const CHAMPION_K_PER_WIN_REDUCTION = 0.05;
 
   // GraphQL filter modifier constants
   // Array-based modifiers require value_list field for enum-based criterion inputs
@@ -892,7 +904,7 @@ async function fetchSceneCount() {
       // Find opponents below (higher index) that haven't been tested
       const belowOpponents = scenes.filter((s, idx) => {
         if (s.id === gauntletFallingItem.id) return false;
-        if (gauntletDefeated.includes(s.id)) return false;
+        if (gauntletDefeated.has(s.id)) return false;
         return idx > fallingIndex; // Below in ranking
       });
       
@@ -931,9 +943,10 @@ async function fetchSceneCount() {
     // If no champion yet, start with a random challenger vs the lowest rated scene
     if (!gauntletChampion) {
       // Reset state
-      gauntletDefeated = [];
+      gauntletDefeated = new Set();
       gauntletFalling = false;
       gauntletFallingItem = null;
+      gauntletDefeaterRating = null;
       
       // Pick random scene as challenger
       const randomIndex = Math.floor(Math.random() * scenes.length);
@@ -966,13 +979,16 @@ async function fetchSceneCount() {
     // Find opponents above champion that haven't been defeated
     const remainingOpponents = scenes.filter((s, idx) => {
       if (s.id === gauntletChampion.id) return false;
-      if (gauntletDefeated.includes(s.id)) return false;
+      if (gauntletDefeated.has(s.id)) return false;
       // Only scenes ranked higher (lower index) or same rating
       return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
     });
     
-    // If no opponents left, champion has truly won
-    if (remainingOpponents.length === 0) {
+    // Victory check: no opponents left, or reached victory threshold for large libraries
+    const hasReachedVictory = remainingOpponents.length === 0 || 
+      (VICTORY_THRESHOLD > 0 && gauntletChampionRank <= VICTORY_THRESHOLD);
+    
+    if (hasReachedVictory) {
       gauntletChampionRank = 1;
       return { 
         scenes: [gauntletChampion], 
@@ -1025,7 +1041,7 @@ async function fetchSceneCount() {
 
     // If no champion yet, start with a random challenger vs the lowest rated scene
     if (!gauntletChampion) {
-      gauntletDefeated = [];
+      gauntletDefeated = new Set();
       
       // Pick random scene as challenger
       const randomIndex = Math.floor(Math.random() * scenes.length);
@@ -1055,12 +1071,15 @@ async function fetchSceneCount() {
     // Find opponents above champion that haven't been defeated
     const remainingOpponents = scenes.filter((s, idx) => {
       if (s.id === gauntletChampion.id) return false;
-      if (gauntletDefeated.includes(s.id)) return false;
+      if (gauntletDefeated.has(s.id)) return false;
       return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
     });
     
-    // If no opponents left, champion has won!
-    if (remainingOpponents.length === 0) {
+    // Victory check: no opponents left, or reached victory threshold for large libraries
+    const hasReachedVictory = remainingOpponents.length === 0 || 
+      (VICTORY_THRESHOLD > 0 && gauntletChampionRank <= VICTORY_THRESHOLD);
+    
+    if (hasReachedVictory) {
       gauntletChampionRank = 1;
       return { 
         scenes: [gauntletChampion], 
@@ -1182,9 +1201,10 @@ async function fetchSceneCount() {
     // Reset state
     gauntletFalling = false;
     gauntletFallingItem = null;
+    gauntletDefeaterRating = null;
     gauntletChampion = null;
     gauntletWins = 0;
-    gauntletDefeated = [];
+    gauntletDefeated = new Set();
     
     // Attach button handler
     const newBtn = comparisonArea.querySelector("#hon-new-gauntlet");
@@ -1266,18 +1286,42 @@ async function fetchSceneCount() {
   // ============================================
 
   /**
-   * Select a random opponent from the closest remaining opponents
-   * Assumes remainingOpponents array is in rank order (best first, closest to champion last)
-   * @param {Array} remainingOpponents - Array of remaining opponents in rank order
-   * @param {number} maxChoices - Maximum number of closest opponents to consider (default: 3)
-   * @returns {Object|null} Randomly selected opponent from the closest options, or null if no opponents
+   * Select opponent using binary search strategy for accurate placement.
+   * Picks the middle opponent to efficiently narrow down the challenger's true ranking.
+   * Falls back to weighted random from top 3 if only a few opponents remain for variety.
+   * 
+   * @param {Array} remainingOpponents - Array of remaining opponents in rank order (best first)
+   * @param {number} fallbackThreshold - Below this count, use weighted random for variety (default: 5)
+   * @returns {Object|null} Selected opponent, or null if no opponents
    */
-  function selectRandomOpponent(remainingOpponents, maxChoices = 3) {
+  function selectOpponentBinarySearch(remainingOpponents, fallbackThreshold = 5) {
     if (remainingOpponents.length === 0) return null;
     
-    // Get up to maxChoices closest opponents from the end of the array
-    const closestOpponents = remainingOpponents.slice(-maxChoices);
-    return closestOpponents[Math.floor(Math.random() * closestOpponents.length)];
+    // For small remaining pools, use weighted random for variety
+    if (remainingOpponents.length <= fallbackThreshold) {
+      // Pick from the closest opponents (end of array for gauntlet climbing)
+      const maxChoices = Math.min(3, remainingOpponents.length);
+      const closestOpponents = remainingOpponents.slice(-maxChoices);
+      return closestOpponents[Math.floor(Math.random() * closestOpponents.length)];
+    }
+    
+    // Binary search: pick the middle opponent for efficient ranking
+    const midIndex = Math.floor(remainingOpponents.length / 2);
+    return remainingOpponents[midIndex];
+  }
+
+  /**
+   * Select an opponent for gauntlet/champion mode battles.
+   * Uses binary search for accurate placement when many opponents remain,
+   * falls back to weighted random for variety when few opponents left.
+   * 
+   * @param {Array} remainingOpponents - Array of remaining opponents in rank order
+   * @param {number} [_unused] - Deprecated parameter, kept for backward compatibility
+   * @returns {Object|null} Selected opponent, or null if no opponents
+   */
+  function selectRandomOpponent(remainingOpponents, _unused = 3) {
+    // Binary search with default fallback threshold of 5
+    return selectOpponentBinarySearch(remainingOpponents, 5);
   }
 
   /**
@@ -1437,10 +1481,15 @@ async function fetchSceneCount() {
     }
     
     // Apply mode-specific multiplier
-    // Champion mode: 0.5x K-factor (half the rating change of Swiss mode)
-    // This allows ratings to update but at a much slower pace
+    // Champion mode: Progressive K-factor reduction based on win streak
+    // Longer streaks = more stable ratings (rewards consistent winners)
+    // Base: 50% of Swiss, further reduced based on streak up to configured maximum
     if (mode === "champion") {
-      return Math.max(1, Math.round(baseKFactor * 0.5));
+      const streakReduction = Math.min(CHAMPION_K_MAX_REDUCTION, gauntletWins * CHAMPION_K_PER_WIN_REDUCTION);
+      const championMultiplier = 0.5 - streakReduction;
+      // Minimum K-factor is 25% of the base to ensure some rating movement
+      const minKFactor = Math.max(4, Math.round(baseKFactor * 0.25));
+      return Math.max(minKFactor, Math.round(baseKFactor * championMultiplier));
     }
     
     // Swiss and gauntlet modes use full K-factor
@@ -2014,7 +2063,7 @@ async function fetchPerformerCount(performerFilter = {}) {
       // Find opponents below (higher index) that haven't been tested
       const belowOpponents = performers.filter((s, idx) => {
         if (s.id === gauntletFallingItem.id) return false;
-        if (gauntletDefeated.includes(s.id)) return false;
+        if (gauntletDefeated.has(s.id)) return false;
         return idx > fallingIndex; // Below in ranking
       });
       
@@ -2053,9 +2102,10 @@ async function fetchPerformerCount(performerFilter = {}) {
     // If no champion yet, start with a random challenger vs the lowest rated performer
     if (!gauntletChampion) {
       // Reset state
-      gauntletDefeated = [];
+      gauntletDefeated = new Set();
       gauntletFalling = false;
       gauntletFallingItem = null;
+      gauntletDefeaterRating = null;
       
       // Pick random performer as challenger
       const randomIndex = Math.floor(Math.random() * performers.length);
@@ -2088,13 +2138,16 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Find opponents above champion that haven't been defeated
     const remainingOpponents = performers.filter((s, idx) => {
       if (s.id === gauntletChampion.id) return false;
-      if (gauntletDefeated.includes(s.id)) return false;
+      if (gauntletDefeated.has(s.id)) return false;
       // Only performers ranked higher (lower index) or same rating
       return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
     });
     
-    // If no opponents left, champion has truly won
-    if (remainingOpponents.length === 0) {
+    // Victory check: no opponents left, or reached victory threshold for large libraries
+    const hasReachedVictory = remainingOpponents.length === 0 || 
+      (VICTORY_THRESHOLD > 0 && gauntletChampionRank <= VICTORY_THRESHOLD);
+    
+    if (hasReachedVictory) {
       gauntletChampionRank = 1;
       return { 
         performers: [gauntletChampion], 
@@ -2149,7 +2202,7 @@ async function fetchPerformerCount(performerFilter = {}) {
 
     // If no champion yet, start with a random challenger vs the lowest rated performer
     if (!gauntletChampion) {
-      gauntletDefeated = [];
+      gauntletDefeated = new Set();
       
       // Pick random performer as challenger
       const randomIndex = Math.floor(Math.random() * performers.length);
@@ -2179,12 +2232,15 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Find opponents above champion that haven't been defeated
     const remainingOpponents = performers.filter((s, idx) => {
       if (s.id === gauntletChampion.id) return false;
-      if (gauntletDefeated.includes(s.id)) return false;
+      if (gauntletDefeated.has(s.id)) return false;
       return idx < championIndex || (s.rating100 || 0) >= (gauntletChampion.rating100 || 0);
     });
     
-    // If no opponents left, champion has won!
-    if (remainingOpponents.length === 0) {
+    // Victory check: no opponents left, or reached victory threshold for large libraries
+    const hasReachedVictory = remainingOpponents.length === 0 || 
+      (VICTORY_THRESHOLD > 0 && gauntletChampionRank <= VICTORY_THRESHOLD);
+    
+    if (hasReachedVictory) {
       gauntletChampionRank = 1;
       return { 
         performers: [gauntletChampion], 
@@ -2679,9 +2735,10 @@ async function fetchPerformerCount(performerFilter = {}) {
     // Set the selected performer as the gauntlet champion
     gauntletChampion = performer;
     gauntletWins = 0;
-    gauntletDefeated = [];
+    gauntletDefeated = new Set();
     gauntletFalling = false;
     gauntletFallingItem = null;
+    gauntletDefeaterRating = null;
     
     // Hide the selection UI
     const selectionContainer = document.getElementById("hon-performer-selection");
@@ -3229,9 +3286,10 @@ async function fetchPerformerCount(performerFilter = {}) {
               gauntletChampion = null;
               gauntletWins = 0;
               gauntletChampionRank = 0;
-              gauntletDefeated = [];
+              gauntletDefeated = new Set();
               gauntletFalling = false;
               gauntletFallingItem = null;
+              gauntletDefeaterRating = null;
               // Show the actions again
               if (actionsEl) actionsEl.style.display = "";
               loadNewPair();
@@ -3267,7 +3325,7 @@ async function fetchPerformerCount(performerFilter = {}) {
               gauntletChampion = null;
               gauntletWins = 0;
               gauntletChampionRank = 0;
-              gauntletDefeated = [];
+              gauntletDefeated = new Set();
               if (actionsEl) actionsEl.style.display = "";
               loadNewPair();
             });
@@ -3415,8 +3473,15 @@ async function fetchPerformerCount(performerFilter = {}) {
       if (gauntletFalling && gauntletFallingItem) {
         if (winnerId === gauntletFallingItem.id) {
           // Falling scene won - found their floor!
-          // Set their rating to just above the scene they beat
-          const finalRating = Math.min(100, loserRating + 1);
+          // Interpolate rating between:
+          // - loserRating: the opponent they just beat (below them in ranking)
+          // - defeaterRating: the opponent that originally beat them (above them in ranking)
+          // This places them at the midpoint between their floor and ceiling
+          const fallingItemRating = gauntletFallingItem.rating100 || 50;
+          const defeaterRating = gauntletDefeaterRating || fallingItemRating;
+          const defeatedOpponentRating = loserRating; // The one they just beat
+          const interpolatedRating = Math.round((defeatedOpponentRating + defeaterRating) / 2);
+          const finalRating = Math.max(1, Math.min(100, interpolatedRating));
           
           // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
           let freshFallingPerformer = gauntletFallingItem;
@@ -3452,7 +3517,7 @@ async function fetchPerformerCount(performerFilter = {}) {
           return;
         } else {
           // Falling scene lost again - keep falling
-          gauntletDefeated.push(winnerId);
+          gauntletDefeated.add(winnerId);
           
           // Fetch latest performer data to get current stats before updating (parallel fetch for performance)
           let freshFallingPerformer = gauntletFallingItem;
@@ -3492,14 +3557,15 @@ async function fetchPerformerCount(performerFilter = {}) {
       
       if (gauntletChampion && winnerId === gauntletChampion.id) {
         // Champion won - add loser to defeated list and continue climbing
-        gauntletDefeated.push(loserId);
+        gauntletDefeated.add(loserId);
         gauntletWins++;
         gauntletChampion.rating100 = newWinnerRating;
       } else if (gauntletChampion && winnerId !== gauntletChampion.id) {
         // Champion LOST - start falling to find their floor
         gauntletFalling = true;
         gauntletFallingItem = loserItem; // The old champion is now falling
-        gauntletDefeated = [winnerId]; // They lost to this scene
+        gauntletDefeated = new Set([winnerId]); // They lost to this scene
+        gauntletDefeaterRating = newWinnerRating; // Store defeater's rating for interpolation
         
         // Winner becomes the new climbing champion
         gauntletChampion = winnerItem;
@@ -3509,7 +3575,7 @@ async function fetchPerformerCount(performerFilter = {}) {
         // No champion yet - winner becomes champion
         gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
-        gauntletDefeated = [loserId];
+        gauntletDefeated = new Set([loserId]);
         gauntletWins = 1;
       }
       
@@ -3541,14 +3607,14 @@ async function fetchPerformerCount(performerFilter = {}) {
       
       if (gauntletChampion && winnerId === gauntletChampion.id) {
         // Champion won - continue climbing
-        gauntletDefeated.push(loserId);
+        gauntletDefeated.add(loserId);
         gauntletWins++;
         gauntletChampion.rating100 = newWinnerRating;
       } else {
         // Champion lost or first pick - winner becomes new champion
         gauntletChampion = winnerItem;
         gauntletChampion.rating100 = newWinnerRating;
-        gauntletDefeated = [loserId];
+        gauntletDefeated = new Set([loserId]);
         gauntletWins = 1;
       }
       
@@ -3725,9 +3791,10 @@ function addFloatingButton() {
           // Reset gauntlet state when switching modes
           gauntletChampion = null;
           gauntletWins = 0;
-          gauntletDefeated = [];
+          gauntletDefeated = new Set();
           gauntletFalling = false;
           gauntletFallingItem = null;
+          gauntletDefeaterRating = null;
           
           // Update button states
           modal.querySelectorAll(".hon-mode-btn").forEach((b) => {
@@ -3763,9 +3830,10 @@ function addFloatingButton() {
         if (battleType === "performers" && (currentMode === "gauntlet" || currentMode === "champion")) {
           gauntletChampion = null;
           gauntletWins = 0;
-          gauntletDefeated = [];
+          gauntletDefeated = new Set();
           gauntletFalling = false;
           gauntletFallingItem = null;
+          gauntletDefeaterRating = null;
         }
         loadNewPair();
       });
@@ -3823,9 +3891,10 @@ function addFloatingButton() {
           if (battleType === "performers" && (currentMode === "gauntlet" || currentMode === "champion")) {
             gauntletChampion = null;
             gauntletWins = 0;
-            gauntletDefeated = [];
+            gauntletDefeated = new Set();
             gauntletFalling = false;
             gauntletFallingItem = null;
+            gauntletDefeaterRating = null;
           }
           loadNewPair();
         }
