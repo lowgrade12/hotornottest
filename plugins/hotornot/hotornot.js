@@ -1407,18 +1407,19 @@ async function fetchSceneCount() {
     let baseKFactor;
     
     // If match count is available, use it for more accurate K-factor
+    // K-factor ranges follow USCF/FIDE approach: 32 for new, 16 for established
     if (matchCount !== null && matchCount !== undefined) {
       // New performers: High K-factor for fast convergence
       if (matchCount < 10) {
-        baseKFactor = 16;
+        baseKFactor = 32;
       }
       // Moderately established: Medium K-factor
       else if (matchCount < 30) {
-        baseKFactor = 12;
+        baseKFactor = 24;
       }
       // Well-established (30+ matches): Low K-factor for stability
       else {
-        baseKFactor = 8;
+        baseKFactor = 16;
       }
     } else {
       // Fallback to rating-based heuristic (legacy behavior)
@@ -1427,11 +1428,11 @@ async function fetchSceneCount() {
       const distanceFromDefault = Math.abs(currentRating - 50);
       
       if (distanceFromDefault < 10) {
-        baseKFactor = 12;  // Higher K for unproven items near default
+        baseKFactor = 24;  // Higher K for unproven items near default
       } else if (distanceFromDefault < 25) {
-        baseKFactor = 10;  // Medium K for moderately established items
+        baseKFactor = 20;  // Medium K for moderately established items
       } else {
-        baseKFactor = 8;   // Lower K for well-established items
+        baseKFactor = 16;  // Lower K for well-established items
       }
     }
     
@@ -1530,7 +1531,8 @@ async function fetchSceneCount() {
     if (currentMode === "gauntlet") {
       // In gauntlet, only the champion/falling scene changes rating
       // Defenders stay the same (they're just benchmarks)
-      // EXCEPT: if the defender is rank #1, they lose 1 point when defeated
+      // EXCEPT: if the defender is rank #1, they get a full ELO penalty when defeated
+      // to ensure rankings remain fluid and upsets are properly reflected
       const isChampionWinner = gauntletChampion && winnerId === gauntletChampion.id;
       const isFallingWinner = gauntletFalling && gauntletFallingItem && winnerId === gauntletFallingItem.id;
       const isChampionLoser = gauntletChampion && loserId === gauntletChampion.id;
@@ -1547,9 +1549,14 @@ async function fetchSceneCount() {
         loserLoss = Math.max(0, Math.round(kFactor * expectedWinner));
       }
       
-      // Special case: if defender was rank #1 and lost, drop their rating by 1
+      // Special case: if defender was rank #1 and lost, apply full ELO penalty
+      // The ELO formula naturally penalizes the #1 significantly because their
+      // "Expected Score" was nearly 100%, making the upset very costly
       if (loserRank === 1 && !isChampionLoser && !isFallingLoser) {
-        loserLoss = 1;
+        const loserK = getKFactor(loserRating, loserMatchCount, "gauntlet");
+        // expectedWinner is from winner's perspective, so expectedLoser = 1 - expectedWinner
+        // loserLoss = K * (1 - expectedLoser) = K * expectedWinner (same as normal ELO loss)
+        loserLoss = Math.max(1, Math.round(loserK * expectedWinner));
       }
     } else if (currentMode === "champion") {
       // Champion mode: Both performers get rating updates, but at a reduced rate (50% of Swiss mode)
@@ -1891,6 +1898,24 @@ async function fetchPerformerCount(performerFilter = {}) {
     const performer1 = selected1.performer;
     const randomIndex = selected1.index;
     const rating1 = performer1.rating100 || 50;
+
+    // 10% "Sanity Check" - randomly pair regardless of rating
+    // This helps detect performers stuck in incorrect rating silos
+    // by occasionally testing them against performers from different rating tiers
+    const isRandomSanityCheck = Math.random() < 0.10;
+    
+    if (isRandomSanityCheck) {
+      // Pick any random performer (excluding performer1)
+      const otherPerformers = performersWithWeights.filter(pw => pw.performer.id !== performer1.id);
+      if (otherPerformers.length > 0) {
+        const randomOpponent = otherPerformers[Math.floor(Math.random() * otherPerformers.length)];
+        console.log('[HotOrNot] Sanity check pairing: random matchup regardless of rating');
+        return { 
+          performers: [performer1, randomOpponent.performer], 
+          ranks: [randomIndex + 1, randomOpponent.index + 1] 
+        };
+      }
+    }
 
     // Find performers within adaptive rating window (tighter for larger pools)
     const matchWindow = performers.length > 50 ? 10 : performers.length > 20 ? 15 : 25;
