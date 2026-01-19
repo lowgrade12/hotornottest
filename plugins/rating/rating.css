@@ -1,0 +1,128 @@
+/* ============================================
+   PERFORMER RATING PLUGIN STYLES
+   ============================================ */
+
+/* Star Rating Container */
+.pr-star-rating {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 10;
+  cursor: default;
+  user-select: none;
+}
+
+/* Individual Stars */
+.pr-star {
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.pr-star:hover {
+  transform: scale(1.2);
+}
+
+/* Star States */
+.pr-star-filled {
+  color: #ffc107;
+  text-shadow: 0 0 4px rgba(255, 193, 7, 0.5);
+}
+
+.pr-star-half {
+  color: #ffc107;
+  text-shadow: 0 0 4px rgba(255, 193, 7, 0.5);
+  opacity: 0.7;
+}
+
+.pr-star-empty {
+  color: #555;
+}
+
+.pr-star-preview {
+  color: #ffdb4d !important;
+  text-shadow: 0 0 6px rgba(255, 219, 77, 0.7);
+}
+
+/* Rating Text Display */
+.pr-rating-text {
+  margin-left: 8px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #fff;
+  min-width: 28px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+/* Feedback Animations */
+.pr-feedback-success {
+  color: #28a745 !important;
+  animation: pr-pulse 0.3s ease;
+}
+
+.pr-feedback-error {
+  color: #dc3545 !important;
+  animation: pr-shake 0.3s ease;
+}
+
+@keyframes pr-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes pr-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .pr-star-rating {
+    padding: 6px 8px;
+  }
+  
+  .pr-star {
+    font-size: 1rem;
+  }
+  
+  .pr-rating-text {
+    font-size: 0.8rem;
+  }
+}
+
+/* Dark/Light Theme Compatibility */
+@media (prefers-color-scheme: light) {
+  .pr-star-rating {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .pr-star-empty {
+    color: #ccc;
+  }
+  
+  .pr-rating-text {
+    color: #333;
+  }
+}
+
+/* Hover effect on card to show rating is interactive */
+.pr-star-rating:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+@media (prefers-color-scheme: light) {
+  .pr-star-rating:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+}
