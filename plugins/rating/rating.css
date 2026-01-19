@@ -50,15 +50,36 @@
   text-shadow: 0 0 6px rgba(255, 219, 77, 0.7);
 }
 
-/* Rating Text Display */
-.pr-rating-text {
+/* Rating Number Input */
+.pr-rating-input {
   margin-left: 8px;
   font-size: 0.9rem;
   font-weight: bold;
   color: #fff;
-  min-width: 28px;
+  width: 45px;
   text-align: center;
   transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 2px 4px;
+  -moz-appearance: textfield;
+}
+
+.pr-rating-input::-webkit-outer-spin-button,
+.pr-rating-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pr-rating-input:focus {
+  outline: none;
+  border-color: #ffc107;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.pr-rating-input::placeholder {
+  color: #888;
 }
 
 /* Feedback Animations */
@@ -94,8 +115,9 @@
     font-size: 1rem;
   }
   
-  .pr-rating-text {
+  .pr-rating-input {
     font-size: 0.8rem;
+    width: 40px;
   }
 }
 
@@ -110,8 +132,14 @@
     color: #ccc;
   }
   
-  .pr-rating-text {
+  .pr-rating-input {
     color: #333;
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.2);
+  }
+  
+  .pr-rating-input:focus {
+    background: rgba(0, 0, 0, 0.1);
   }
 }
 

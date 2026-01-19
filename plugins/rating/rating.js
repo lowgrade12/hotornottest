@@ -117,6 +117,8 @@
     const container = document.createElement("div");
     container.className = "pr-star-rating";
     container.dataset.performerId = performerId;
+    // Store the current rating in dataset so it can be updated
+    container.dataset.currentRating = currentRating !== null ? currentRating : "";
 
     // Convert rating100 to 5-star scale (0-100 -> 0-5)
     const starValue = currentRating !== null ? currentRating / 20 : 0;
@@ -150,6 +152,8 @@
         
         try {
           await updatePerformerRating(performerId, newRating100);
+          // Update the stored rating in dataset
+          container.dataset.currentRating = newRating100;
           updateStarDisplay(container, newRating100);
           showRatingFeedback(container, newRating100);
         } catch (err) {
@@ -166,16 +170,54 @@
       container.appendChild(star);
     }
 
-    // Reset hover preview when mouse leaves
+    // Reset hover preview when mouse leaves - use stored rating from dataset
     container.addEventListener("mouseleave", () => {
-      updateStarDisplay(container, currentRating);
+      const storedRating = container.dataset.currentRating;
+      const ratingValue = storedRating !== "" ? parseInt(storedRating) : null;
+      updateStarDisplay(container, ratingValue);
     });
 
-    // Add rating text
-    const ratingText = document.createElement("span");
-    ratingText.className = "pr-rating-text";
-    ratingText.textContent = currentRating !== null ? `${currentRating}` : "--";
-    container.appendChild(ratingText);
+    // Add rating input (editable number field)
+    const ratingInput = document.createElement("input");
+    ratingInput.type = "number";
+    ratingInput.className = "pr-rating-input";
+    ratingInput.min = "0";
+    ratingInput.max = "100";
+    ratingInput.value = currentRating !== null ? currentRating : "";
+    ratingInput.placeholder = "--";
+
+    // Handle rating input change
+    ratingInput.addEventListener("change", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      let newRating = parseInt(ratingInput.value);
+      if (isNaN(newRating)) {
+        newRating = 0;
+      }
+      // Clamp to valid range
+      newRating = Math.max(0, Math.min(100, newRating));
+      ratingInput.value = newRating;
+      
+      try {
+        await updatePerformerRating(performerId, newRating);
+        // Update the stored rating in dataset
+        container.dataset.currentRating = newRating;
+        updateStarDisplay(container, newRating);
+        showRatingFeedback(container, newRating);
+      } catch (err) {
+        console.error("[PerformerRating] Failed to update rating:", err);
+        showRatingError(container);
+      }
+    });
+
+    // Prevent card click when interacting with input
+    ratingInput.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    container.appendChild(ratingInput);
 
     // Prevent card click when interacting with rating
     container.addEventListener("click", (e) => {
@@ -213,10 +255,10 @@
       }
     });
 
-    // Update rating text
-    const ratingText = container.querySelector(".pr-rating-text");
-    if (ratingText) {
-      ratingText.textContent = rating100 !== null ? `${rating100}` : "--";
+    // Update rating input
+    const ratingInput = container.querySelector(".pr-rating-input");
+    if (ratingInput) {
+      ratingInput.value = rating100 !== null ? rating100 : "";
     }
   }
 
@@ -246,11 +288,11 @@
    * @param {number} rating100 - New rating value
    */
   function showRatingFeedback(container, rating100) {
-    const ratingText = container.querySelector(".pr-rating-text");
-    if (ratingText) {
-      ratingText.classList.add("pr-feedback-success");
+    const ratingInput = container.querySelector(".pr-rating-input");
+    if (ratingInput) {
+      ratingInput.classList.add("pr-feedback-success");
       setTimeout(() => {
-        ratingText.classList.remove("pr-feedback-success");
+        ratingInput.classList.remove("pr-feedback-success");
       }, 500);
     }
   }
@@ -260,11 +302,11 @@
    * @param {HTMLElement} container - Star rating container
    */
   function showRatingError(container) {
-    const ratingText = container.querySelector(".pr-rating-text");
-    if (ratingText) {
-      ratingText.classList.add("pr-feedback-error");
+    const ratingInput = container.querySelector(".pr-rating-input");
+    if (ratingInput) {
+      ratingInput.classList.add("pr-feedback-error");
       setTimeout(() => {
-        ratingText.classList.remove("pr-feedback-error");
+        ratingInput.classList.remove("pr-feedback-error");
       }, 1000);
     }
   }
