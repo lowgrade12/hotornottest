@@ -432,11 +432,20 @@
     // Walk up the DOM tree to find the performer card
     let element = container.parentElement;
     while (element) {
-      // Check for common card class names and semantic patterns
+      // Check for common card class names first (fast)
       if (element.classList.contains("performer-card") ||
-          element.classList.contains("card") ||
-          element.querySelector("a[href*='/performers/']")) {
+          element.classList.contains("card")) {
         return element;
+      }
+      // Check for direct link as child (faster than querySelector)
+      const children = element.children;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.tagName === "A" && 
+            child.href && 
+            child.href.includes("/performers/")) {
+          return element;
+        }
       }
       element = element.parentElement;
     }
