@@ -156,6 +156,9 @@
           container.dataset.currentRating = newRating100;
           updateStarDisplay(container, newRating100);
           showRatingFeedback(container, newRating100);
+          // Update any native Stash rating displays on the card
+          const parentCard = findParentCard(container);
+          updateNativeRatingDisplay(parentCard, newRating100);
         } catch (err) {
           console.error("[PerformerRating] Failed to update rating:", err);
           showRatingError(container);
@@ -207,6 +210,9 @@
         container.dataset.currentRating = newRating;
         updateStarDisplay(container, newRating);
         showRatingFeedback(container, newRating);
+        // Update any native Stash rating displays on the card
+        const parentCard = findParentCard(container);
+        updateNativeRatingDisplay(parentCard, newRating);
       } catch (err) {
         console.error("[PerformerRating] Failed to update rating:", err);
         showRatingError(container);
@@ -355,6 +361,57 @@
       if (match) {
         return parseInt(match[1]);
       }
+    }
+    return null;
+  }
+
+  /**
+   * Update Stash's native rating display elements on the card
+   * This ensures all rating displays are synchronized after a rating change
+   * @param {HTMLElement} card - Performer card element
+   * @param {number} rating100 - New rating value (0-100)
+   */
+  function updateNativeRatingDisplay(card, rating100) {
+    if (!card) return;
+    
+    // Find and update any native Stash rating elements on the card
+    // Exclude our own rating widget to avoid conflicts
+    const ratingElements = card.querySelectorAll("[class*='rating']");
+    ratingElements.forEach(el => {
+      // Skip our plugin's rating widget
+      if (el.classList.contains("pr-star-rating") || 
+          el.classList.contains("pr-rating-input") ||
+          el.closest(".pr-star-rating")) {
+        return;
+      }
+      
+      // Update the text content if it contains a rating number
+      const text = el.textContent;
+      const match = text.match(/(\d+)/);
+      if (match) {
+        // Replace the old rating number with the new one
+        el.textContent = text.replace(match[1], rating100.toString());
+      }
+    });
+  }
+
+  /**
+   * Find the parent card element containing the rating widget
+   * @param {HTMLElement} container - The rating widget container
+   * @returns {HTMLElement|null} The parent card element or null
+   */
+  function findParentCard(container) {
+    // Walk up the DOM tree to find the performer card
+    let element = container.parentElement;
+    while (element) {
+      // Check for common card class names
+      if (element.classList.contains("performer-card") ||
+          element.classList.contains("card") ||
+          element.dataset.prProcessed === "true" ||
+          element.querySelector("a[href*='/performers/']")) {
+        return element;
+      }
+      element = element.parentElement;
     }
     return null;
   }
