@@ -24,7 +24,7 @@
   /**
    * Update performer rating via GraphQL
    * @param {string} performerId - The performer's ID
-   * @param {number} rating100 - Rating value (1-100)
+   * @param {number} rating100 - Rating value (0-100)
    * @returns {Promise<Object>} Updated performer data
    */
   async function updatePerformerRating(performerId, rating100) {
@@ -424,17 +424,16 @@
       // Fetch all ratings in a single batch query
       const ratings = await getMultiplePerformerRatings(performerIds);
       
-      // Inject widgets for each card
-      for (const [performerId, card] of cardIdMap) {
+      // Inject widgets for each card in parallel
+      const widgetPromises = Array.from(cardIdMap.entries()).map(([performerId, card]) => {
         const rating = ratings.get(performerId);
-        await injectRatingWidget(card, rating);
-      }
+        return injectRatingWidget(card, rating);
+      });
+      await Promise.all(widgetPromises);
     } catch (err) {
       console.error("[PerformerRating] Error processing cards in batch:", err);
-      // Fallback to individual processing
-      for (const card of unprocessedCards) {
-        await injectRatingWidget(card);
-      }
+      // Fallback to individual processing (also parallelized)
+      await Promise.all(unprocessedCards.map(card => injectRatingWidget(card)));
     }
   }
 
