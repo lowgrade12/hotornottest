@@ -50,10 +50,21 @@ const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 40));
 - Online games: Often 32-64 for new, 16-32 for experienced
 - HotOrNot uses: 32 for new, 24 for moderate, 16 for established
 
+**Scene Count Weighting (Performers):**
+Performers with more scenes have more stable ratings (lower K-factor):
+- 100+ scenes: 50% K-factor (very stable)
+- 50-99 scenes: 65% K-factor
+- 20-49 scenes: 80% K-factor
+- 10-19 scenes: 90% K-factor
+- <10 scenes: Full K-factor (no reduction)
+
+This reflects that performers with extensive filmography have more "evidence" of their quality and their rating should be more stable.
+
 **Implications:**
 - Dynamic K-factor on 1-100 scale means:
   - New performers converge quickly (max ±32 points)
   - Established ratings remain more stable (max ±16 points)
+  - Prolific performers (100+ scenes) have very stable ratings (max ±8 points)
   - Better balance between responsiveness and stability
 
 #### 3. Rating Change Calculation
