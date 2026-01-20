@@ -984,16 +984,27 @@ async function fetchSceneCount() {
       };
     }
     
-    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
-    // but include all undefeated as potential opponents to ensure we can always find a match
+    // From undefeated opponents, only fight those ranked higher (lower index = higher rating)
+    // Once the champion has defeated all higher-ranked opponents, they've reached the top
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
       const opponentIndex = sceneIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
-    // Pick from higher ranked if available, otherwise pick from any undefeated
-    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
-    const nextOpponent = selectRandomOpponent(opponentPool);
+    // Victory when there are no more higher-ranked opponents to defeat
+    // The champion has proven themselves against all scenes above them
+    if (higherRankedOpponents.length === 0) {
+      gauntletChampionRank = 1;
+      return { 
+        scenes: [gauntletChampion], 
+        ranks: [1],
+        isVictory: true,
+        isFalling: false
+      };
+    }
+    
+    // Pick from higher ranked opponents
+    const nextOpponent = selectRandomOpponent(higherRankedOpponents);
     const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
@@ -1082,16 +1093,26 @@ async function fetchSceneCount() {
       };
     }
     
-    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
-    // but include all undefeated as potential opponents to ensure we can always find a match
+    // From undefeated opponents, only fight those ranked higher (lower index = higher rating)
+    // Once the champion has defeated all higher-ranked opponents, they've reached the top
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
       const opponentIndex = sceneIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
-    // Pick from higher ranked if available, otherwise pick from any undefeated
-    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
-    const nextOpponent = selectRandomOpponent(opponentPool);
+    // Victory when there are no more higher-ranked opponents to defeat
+    // The champion has proven themselves against all scenes above them
+    if (higherRankedOpponents.length === 0) {
+      gauntletChampionRank = 1;
+      return { 
+        scenes: [gauntletChampion], 
+        ranks: [1],
+        isVictory: true
+      };
+    }
+    
+    // Pick from higher ranked opponents
+    const nextOpponent = selectRandomOpponent(higherRankedOpponents);
     const nextOpponentIndex = sceneIndexMap.get(nextOpponent.id);
     
     return { 
@@ -1774,53 +1795,73 @@ async function fetchPerformerCount(performerFilter = {}) {
   }
 
   /**
-   * Calculate a weight for performer selection based on last match time.
-   * More recent matches get lower weights (less likely to be selected).
-   * Returns a weight between 0.1 (very recent) and 1.0 (not recent or no data).
+   * Calculate a weight for performer selection based on last match time and match count.
+   * Performers with fewer matches and older last matches get higher weights (more likely to be selected).
+   * Returns a weight between 0.1 and 3.0 to prioritize undersampled performers.
    * @param {Object} performer - Performer object with custom_fields
-   * @returns {number} Weight value between 0.1 and 1.0
+   * @returns {number} Weight value between 0.1 and 3.0
    */
   function getRecencyWeight(performer) {
     const stats = parsePerformerEloData(performer);
     
-    if (!stats.last_match) {
-      // No previous match - full weight
-      return 1.0;
+    // Calculate match count weight component
+    // Performers with fewer matches get higher weights
+    // 0 matches: weight = 3.0 (highest priority - never been matched)
+    // 1-5 matches: weight = 2.0 (high priority)
+    // 6-15 matches: weight = 1.5 (moderate priority)
+    // 16-30 matches: weight = 1.0 (normal priority)
+    // 30+ matches: weight = 0.5 (low priority - well established)
+    let matchCountWeight;
+    if (stats.total_matches === 0) {
+      matchCountWeight = 3.0;
+    } else if (stats.total_matches <= 5) {
+      matchCountWeight = 2.0;
+    } else if (stats.total_matches <= 15) {
+      matchCountWeight = 1.5;
+    } else if (stats.total_matches <= 30) {
+      matchCountWeight = 1.0;
+    } else {
+      matchCountWeight = 0.5;
     }
     
-    try {
-      const lastMatchDate = new Date(stats.last_match);
-      
-      // Check for invalid date
-      if (isNaN(lastMatchDate.getTime())) {
-        console.warn(`[HotOrNot] Invalid last_match date for performer ${performer.id}`);
-        return 1.0;
+    // Calculate recency weight component
+    let recencyWeight = 1.0;
+    
+    if (stats.last_match) {
+      try {
+        const lastMatchDate = new Date(stats.last_match);
+        
+        // Check for invalid date
+        if (!isNaN(lastMatchDate.getTime())) {
+          const lastMatchTime = lastMatchDate.getTime();
+          const now = Date.now();
+          const hoursSinceMatch = (now - lastMatchTime) / (1000 * 60 * 60);
+          
+          // Weight calculation:
+          // 0-1 hours ago: weight = 0.1 (very unlikely)
+          // 1-6 hours ago: weight = 0.3 (less likely)
+          // 6-24 hours ago: weight = 0.6 (moderately likely)
+          // 24+ hours ago: weight = 1.0 (full probability)
+          
+          if (hoursSinceMatch < 1) {
+            recencyWeight = 0.1;
+          } else if (hoursSinceMatch < 6) {
+            recencyWeight = 0.3;
+          } else if (hoursSinceMatch < 24) {
+            recencyWeight = 0.6;
+          } else {
+            recencyWeight = 1.0;
+          }
+        }
+      } catch (e) {
+        // If date parsing fails, use default recency weight
+        console.warn(`[HotOrNot] Failed to parse last_match for performer ${performer.id}:`, e);
       }
-      
-      const lastMatchTime = lastMatchDate.getTime();
-      const now = Date.now();
-      const hoursSinceMatch = (now - lastMatchTime) / (1000 * 60 * 60);
-      
-      // Weight calculation:
-      // 0-1 hours ago: weight = 0.1 (very unlikely)
-      // 1-6 hours ago: weight = 0.3 (less likely)
-      // 6-24 hours ago: weight = 0.6 (moderately likely)
-      // 24+ hours ago: weight = 1.0 (full probability)
-      
-      if (hoursSinceMatch < 1) {
-        return 0.1;
-      } else if (hoursSinceMatch < 6) {
-        return 0.3;
-      } else if (hoursSinceMatch < 24) {
-        return 0.6;
-      } else {
-        return 1.0;
-      }
-    } catch (e) {
-      // If date parsing fails, give full weight
-      console.warn(`[HotOrNot] Failed to parse last_match for performer ${performer.id}:`, e);
-      return 1.0;
     }
+    
+    // Combine weights: multiply match count weight by recency weight
+    // This ensures both factors contribute to the final selection probability
+    return matchCountWeight * recencyWeight;
   }
 
   /**
@@ -2127,16 +2168,27 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
-    // but include all undefeated as potential opponents to ensure we can always find a match
+    // From undefeated opponents, only fight those ranked higher (lower index = higher rating)
+    // Once the champion has defeated all higher-ranked opponents, they've reached the top
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
       const opponentIndex = performerIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
-    // Pick from higher ranked if available, otherwise pick from any undefeated
-    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
-    const nextOpponent = selectRandomOpponent(opponentPool);
+    // Victory when there are no more higher-ranked opponents to defeat
+    // The champion has proven themselves against all performers above them
+    if (higherRankedOpponents.length === 0) {
+      gauntletChampionRank = 1;
+      return { 
+        performers: [gauntletChampion], 
+        ranks: [1],
+        isVictory: true,
+        isFalling: false
+      };
+    }
+    
+    // Pick from higher ranked opponents
+    const nextOpponent = selectRandomOpponent(higherRankedOpponents);
     const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
@@ -2227,16 +2279,26 @@ async function fetchPerformerCount(performerFilter = {}) {
       };
     }
     
-    // From undefeated opponents, prefer those ranked higher (lower index = higher rating)
-    // but include all undefeated as potential opponents to ensure we can always find a match
+    // From undefeated opponents, only fight those ranked higher (lower index = higher rating)
+    // Once the champion has defeated all higher-ranked opponents, they've reached the top
     const higherRankedOpponents = allUndefeatedOpponents.filter((s) => {
       const opponentIndex = performerIndexMap.get(s.id);
       return opponentIndex < championIndex;
     });
     
-    // Pick from higher ranked if available, otherwise pick from any undefeated
-    const opponentPool = higherRankedOpponents.length > 0 ? higherRankedOpponents : allUndefeatedOpponents;
-    const nextOpponent = selectRandomOpponent(opponentPool);
+    // Victory when there are no more higher-ranked opponents to defeat
+    // The champion has proven themselves against all performers above them
+    if (higherRankedOpponents.length === 0) {
+      gauntletChampionRank = 1;
+      return { 
+        performers: [gauntletChampion], 
+        ranks: [1],
+        isVictory: true
+      };
+    }
+    
+    // Pick from higher ranked opponents
+    const nextOpponent = selectRandomOpponent(higherRankedOpponents);
     const nextOpponentIndex = performerIndexMap.get(nextOpponent.id);
     
     return { 
