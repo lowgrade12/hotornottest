@@ -48,9 +48,17 @@ A plugin for [Stash](https://stashapp.cc/) that uses an ELO-style rating system 
 - Losing to lower-rated items costs more points
 
 **Adaptive K-Factor:**
-- New performers (<10 matches): K=16 for fast initial positioning
-- Moderately established (10-30 matches): K=12 for balanced adjustments
-- Well-established (>50 matches): K=8 for stable rankings
+- New performers (<10 matches): K=32 for fast initial positioning
+- Moderately established (10-30 matches): K=24 for balanced adjustments
+- Well-established (30+ matches): K=16 for stable rankings
+
+**Scene Count Weighting (Performers):**
+Performers with more scenes have more stable ratings (lower K-factor):
+- 100+ scenes: 50% K-factor (very stable)
+- 50-99 scenes: 65% K-factor
+- 20-49 scenes: 80% K-factor
+- 10-19 scenes: 90% K-factor
+- <10 scenes: Full K-factor (no reduction)
 
 **Statistics Tracking:**
 Tracks wins, losses, streaks, win rates, and match history in the `hotornot_stats` custom field.
