@@ -285,7 +285,7 @@
 
     // Handle slider input (real-time updates while dragging)
     ratingSlider.addEventListener("input", () => {
-      const newRating = parseInt(ratingSlider.value);
+      const newRating = parseInt(ratingSlider.value, 10);
       // Update stars and value display in real-time while dragging
       updateStarDisplay(container, newRating);
       ratingValue.textContent = newRating;
@@ -293,7 +293,7 @@
 
     // Handle slider change (when user releases the slider - save to server)
     ratingSlider.addEventListener("change", async () => {
-      const newRating = parseInt(ratingSlider.value);
+      const newRating = parseInt(ratingSlider.value, 10);
       
       try {
         await updatePerformerRating(performerId, newRating);
@@ -308,7 +308,7 @@
         showRatingError(container);
         // Restore the previous rating on error
         const storedRating = container.dataset.currentRating;
-        const currentValue = storedRating !== "" ? parseInt(storedRating) : 0;
+        const currentValue = storedRating !== "" ? parseInt(storedRating, 10) : 0;
         ratingSlider.value = currentValue;
         ratingValue.textContent = currentValue !== 0 ? currentValue : "--";
         updateStarDisplay(container, currentValue !== 0 ? currentValue : null);
