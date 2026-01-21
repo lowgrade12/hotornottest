@@ -2,6 +2,47 @@
   "use strict";
 
   // ============================================
+  // RATINGS CACHE
+  // ============================================
+  
+  // Local cache for ratings to ensure UI stays in sync across React re-renders
+  // Map<performerId, { rating100: number|null, timestamp: number }>
+  const ratingsCache = new Map();
+  
+  // Cache TTL in milliseconds (5 minutes) - after this, we'll re-fetch from server
+  const CACHE_TTL = 5 * 60 * 1000;
+  
+  /**
+   * Get a rating from the local cache
+   * @param {string} performerId - Performer ID
+   * @returns {number|null|undefined} Cached rating, or undefined if not cached or expired
+   */
+  function getCachedRating(performerId) {
+    const cached = ratingsCache.get(performerId);
+    if (!cached) return undefined;
+    
+    // Check if cache entry is still valid
+    if (Date.now() - cached.timestamp > CACHE_TTL) {
+      ratingsCache.delete(performerId);
+      return undefined;
+    }
+    
+    return cached.rating100;
+  }
+  
+  /**
+   * Set a rating in the local cache
+   * @param {string} performerId - Performer ID
+   * @param {number|null} rating100 - Rating value
+   */
+  function setCachedRating(performerId, rating100) {
+    ratingsCache.set(performerId, {
+      rating100,
+      timestamp: Date.now()
+    });
+  }
+
+  // ============================================
   // GRAPHQL HELPERS
   // ============================================
 
@@ -45,11 +86,16 @@
       rating: Math.max(0, Math.min(100, Math.round(rating100)))
     });
 
-    console.log(`[PerformerRating] Updated performer ${performerId} rating to ${rating100}`);
+    const updatedRating = result.performerUpdate.rating100;
+    
+    // Update the local cache so React re-renders use the correct value
+    setCachedRating(performerId, updatedRating);
+    
+    console.log(`[PerformerRating] Updated performer ${performerId} rating to ${updatedRating}`);
     
     // Dispatch custom event so all rating widgets for this performer can update
     document.dispatchEvent(new CustomEvent("performer:rating:updated", {
-      detail: { performerId, rating100: result.performerUpdate.rating100 }
+      detail: { performerId, rating100: updatedRating }
     }));
     
     return result.performerUpdate;
@@ -57,10 +103,17 @@
 
   /**
    * Get performer rating by ID
+   * Uses local cache for recently updated ratings to ensure UI consistency
    * @param {string} performerId - The performer's ID
    * @returns {Promise<number|null>} Rating value or null if not rated
    */
   async function getPerformerRating(performerId) {
+    // Check the cache first
+    const cachedRating = getCachedRating(performerId);
+    if (cachedRating !== undefined) {
+      return cachedRating;
+    }
+    
     const query = `
       query GetPerformerRating($id: ID!) {
         findPerformer(id: $id) {
@@ -71,11 +124,17 @@
     `;
 
     const result = await graphqlQuery(query, { id: performerId });
-    return result.findPerformer ? result.findPerformer.rating100 : null;
+    const rating = result.findPerformer ? result.findPerformer.rating100 : null;
+    
+    // Cache the fetched rating
+    setCachedRating(performerId, rating);
+    
+    return rating;
   }
 
   /**
    * Get multiple performer ratings in a single request
+   * Uses local cache for recently updated ratings to ensure UI consistency
    * @param {string[]} performerIds - Array of performer IDs
    * @returns {Promise<Map<string, number|null>>} Map of performer ID to rating
    */
@@ -84,9 +143,27 @@
       return new Map();
     }
 
-    // Build a query that fetches multiple performers at once
+    const ratings = new Map();
+    const uncachedIds = [];
+    
+    // First, check the cache for each performer
+    for (const id of performerIds) {
+      const cachedRating = getCachedRating(id);
+      if (cachedRating !== undefined) {
+        ratings.set(id, cachedRating);
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+    
+    // If all ratings were cached, return immediately
+    if (uncachedIds.length === 0) {
+      return ratings;
+    }
+
+    // Build a query that fetches only uncached performers
     // GraphQL aliases allow us to query the same field multiple times with different arguments
-    const aliasedQueries = performerIds.map((id, index) => 
+    const aliasedQueries = uncachedIds.map((id, index) => 
       `p${index}: findPerformer(id: "${id}") { id rating100 }`
     ).join("\n");
 
@@ -94,18 +171,24 @@
 
     try {
       const result = await graphqlQuery(query, {});
-      const ratings = new Map();
       
-      performerIds.forEach((id, index) => {
+      uncachedIds.forEach((id, index) => {
         const performer = result[`p${index}`];
-        ratings.set(id, performer ? performer.rating100 : null);
+        const rating = performer ? performer.rating100 : null;
+        ratings.set(id, rating);
+        // Cache the fetched rating
+        setCachedRating(id, rating);
       });
       
       return ratings;
     } catch (err) {
       console.error("[PerformerRating] Error fetching multiple ratings:", err);
-      // Fallback to returning empty map
-      return new Map();
+      // Log which performers couldn't be fetched
+      if (uncachedIds.length > 0) {
+        console.warn(`[PerformerRating] Failed to fetch ratings for performers: ${uncachedIds.join(", ")}`);
+      }
+      // Return what we have from cache (may be partial)
+      return ratings;
     }
   }
 
