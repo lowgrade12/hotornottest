@@ -50,36 +50,70 @@
   text-shadow: 0 0 6px rgba(255, 219, 77, 0.7);
 }
 
-/* Rating Number Input */
-.pr-rating-input {
+/* Rating Slider */
+.pr-rating-slider {
   margin-left: 8px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  color: #fff;
-  width: 45px;
-  text-align: center;
-  transition: all 0.2s ease;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  padding: 2px 4px;
-  -moz-appearance: textfield;
-}
-
-.pr-rating-input::-webkit-outer-spin-button,
-.pr-rating-input::-webkit-inner-spin-button {
+  width: 80px;
+  height: 6px;
   -webkit-appearance: none;
-  margin: 0;
-}
-
-.pr-rating-input:focus {
-  outline: none;
-  border-color: #ffc107;
+  appearance: none;
   background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
 }
 
-.pr-rating-input::placeholder {
-  color: #888;
+.pr-rating-slider:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.pr-rating-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #ffc107;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(255, 193, 7, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pr-rating-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.7);
+}
+
+.pr-rating-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #ffc107;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(255, 193, 7, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pr-rating-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.7);
+}
+
+.pr-rating-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Rating Value Display */
+.pr-rating-value {
+  margin-left: 6px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #ffc107;
+  min-width: 28px;
+  text-align: center;
 }
 
 /* Feedback Animations */
@@ -115,9 +149,13 @@
     font-size: 1rem;
   }
   
-  .pr-rating-input {
-    font-size: 0.8rem;
-    width: 40px;
+  .pr-rating-slider {
+    width: 60px;
+  }
+  
+  .pr-rating-value {
+    font-size: 0.75rem;
+    min-width: 24px;
   }
 }
 
@@ -132,14 +170,16 @@
     color: #ccc;
   }
   
-  .pr-rating-input {
-    color: #333;
-    background: rgba(0, 0, 0, 0.05);
-    border-color: rgba(0, 0, 0, 0.2);
+  .pr-rating-slider {
+    background: rgba(0, 0, 0, 0.1);
   }
   
-  .pr-rating-input:focus {
-    background: rgba(0, 0, 0, 0.1);
+  .pr-rating-slider:hover {
+    background: rgba(0, 0, 0, 0.2);
+  }
+  
+  .pr-rating-value {
+    color: #d4a200;
   }
 }
 
