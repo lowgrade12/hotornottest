@@ -183,7 +183,11 @@
       return ratings;
     } catch (err) {
       console.error("[PerformerRating] Error fetching multiple ratings:", err);
-      // Fallback to returning what we have from cache
+      // Log which performers couldn't be fetched
+      if (uncachedIds.length > 0) {
+        console.warn(`[PerformerRating] Failed to fetch ratings for performers: ${uncachedIds.join(", ")}`);
+      }
+      // Return what we have from cache (may be partial)
       return ratings;
     }
   }
