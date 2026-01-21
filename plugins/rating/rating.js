@@ -239,22 +239,7 @@
     });
 
     // Listen for rating updates from other sources (e.g., other widgets for same performer)
-    const handleRatingUpdate = (e) => {
-      if (e.detail.performerId === performerId) {
-        const newRating = e.detail.rating100;
-        container.dataset.currentRating = newRating !== null ? newRating : "";
-        updateStarDisplay(container, newRating);
-        // Also update the input field
-        const input = container.querySelector(".pr-rating-input");
-        if (input) {
-          input.value = newRating !== null ? newRating : "";
-        }
-        // Update native Stash rating displays on the associated card
-        const parentCard = findParentCard(container);
-        updateNativeRatingDisplay(parentCard, newRating);
-      }
-    };
-    document.addEventListener("performer:rating:updated", handleRatingUpdate);
+    // Note: Global event delegation is set up in init() to avoid memory leaks
 
     return container;
   }
@@ -622,6 +607,21 @@
    */
   function init() {
     console.log("[PerformerRating] Plugin initialized");
+
+    // Global event listener for rating updates (event delegation pattern)
+    // This avoids memory leaks from per-widget listeners
+    document.addEventListener("performer:rating:updated", (e) => {
+      const { performerId, rating100 } = e.detail;
+      // Find all rating widgets for this performer
+      const widgets = document.querySelectorAll(`.pr-star-rating[data-performer-id="${performerId}"]`);
+      widgets.forEach((container) => {
+        container.dataset.currentRating = rating100 !== null ? rating100 : "";
+        updateStarDisplay(container, rating100);
+        // Update native Stash rating displays on the associated card
+        const parentCard = findParentCard(container);
+        updateNativeRatingDisplay(parentCard, rating100);
+      });
+    });
 
     // Initial processing if on performers page
     if (isPerformersPage()) {
