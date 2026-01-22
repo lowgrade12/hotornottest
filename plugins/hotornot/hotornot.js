@@ -1020,19 +1020,20 @@
     let baseKFactor;
     
     // If match count is available, use it for more accurate K-factor
-    // K-factor ranges follow USCF/FIDE approach: 32 for new, 16 for established
+    // K-factor ranges follow a reduced USCF/FIDE approach for slower rating changes:
+    // This makes it harder to jump to extreme ratings quickly
     if (matchCount !== null && matchCount !== undefined) {
-      // New performers: High K-factor for fast convergence
+      // New performers: Moderate K-factor for convergence (reduced from 32)
       if (matchCount < 10) {
-        baseKFactor = 32;
-      }
-      // Moderately established: Medium K-factor
-      else if (matchCount < 30) {
-        baseKFactor = 24;
-      }
-      // Well-established (30+ matches): Low K-factor for stability
-      else {
         baseKFactor = 16;
+      }
+      // Moderately established: Lower K-factor (reduced from 24)
+      else if (matchCount < 30) {
+        baseKFactor = 12;
+      }
+      // Well-established (30+ matches): Low K-factor for stability (reduced from 16)
+      else {
+        baseKFactor = 8;
       }
     } else {
       // Fallback to rating-based heuristic (legacy behavior)
@@ -1041,11 +1042,11 @@
       const distanceFromDefault = Math.abs(currentRating - 50);
       
       if (distanceFromDefault < 10) {
-        baseKFactor = 24;  // Higher K for unproven items near default
+        baseKFactor = 14;  // Higher K for unproven items near default (reduced from 24)
       } else if (distanceFromDefault < 25) {
-        baseKFactor = 20;  // Medium K for moderately established items
+        baseKFactor = 10;  // Medium K for moderately established items (reduced from 20)
       } else {
-        baseKFactor = 16;  // Lower K for well-established items
+        baseKFactor = 8;   // Lower K for well-established items (reduced from 16)
       }
     }
     
@@ -1071,7 +1072,7 @@
       }
       // Performers with < 10 scenes: full K-factor (no reduction)
       
-      baseKFactor = Math.max(4, Math.round(baseKFactor * sceneMultiplier));
+      baseKFactor = Math.max(2, Math.round(baseKFactor * sceneMultiplier));
     }
     
     // Apply mode-specific multiplier
@@ -1083,6 +1084,40 @@
     
     // Swiss and gauntlet modes use full K-factor
     return baseKFactor;
+  }
+
+  /**
+   * Apply diminishing returns for rating gains at higher ratings.
+   * Makes it progressively harder to reach 100 - the closer you are to 100,
+   * the less points you gain from a win.
+   * @param {number} currentRating - Current rating (1-100)
+   * @param {number} baseGain - Base rating gain calculated from ELO formula
+   * @returns {number} Adjusted gain with diminishing returns applied
+   */
+  function applyDiminishingReturns(currentRating, baseGain) {
+    if (baseGain <= 0) return baseGain;
+    
+    // Calculate how close we are to the ceiling (100)
+    // The multiplier decreases as we approach 100
+    // At rating 50: multiplier = 1.0 (full gain)
+    // At rating 75: multiplier = 0.25
+    // At rating 90: multiplier = 0.04
+    // At rating 95: multiplier = 0.01
+    const distanceFromCeiling = 100 - currentRating;
+    
+    // Use a quadratic curve for smooth diminishing returns
+    // Formula: multiplier = (distance / 50)^2, clamped between 0 and 1
+    // This creates a smooth curve that gets progressively steeper near 100
+    const multiplier = Math.min(1, Math.pow(distanceFromCeiling / 50, 2));
+    
+    // Ensure at least 1 point can be gained if baseGain > 0 and not at the absolute ceiling
+    const adjustedGain = Math.round(baseGain * multiplier);
+    
+    // At rating 100, no more gains possible
+    if (currentRating >= 100) return 0;
+    
+    // Otherwise ensure at least 1 point gain when baseGain > 0
+    return Math.max(1, adjustedGain);
   }
 
   /**
@@ -1187,7 +1222,9 @@
       
       // Only the active item (champion or falling) gets rating changes
       if (isChampionWinner || isFallingWinner) {
-        winnerGain = Math.max(0, Math.round(kFactor * (1 - expectedWinner)));
+        const baseGain = Math.max(0, Math.round(kFactor * (1 - expectedWinner)));
+        // Apply diminishing returns - harder to gain points at higher ratings
+        winnerGain = applyDiminishingReturns(winnerRating, baseGain);
       }
       if (isChampionLoser || isFallingLoser) {
         loserLoss = Math.max(0, Math.round(kFactor * expectedWinner));
@@ -1212,7 +1249,9 @@
       const loserK = getKFactor(loserRating, loserMatchCount, "champion", loserSceneCount);
       
       // Calculate changes using their respective K-factors (reduced by 50% for champion mode)
-      winnerGain = Math.max(0, Math.round(winnerK * (1 - expectedWinner)));
+      const baseGain = Math.max(0, Math.round(winnerK * (1 - expectedWinner)));
+      // Apply diminishing returns - harder to gain points at higher ratings
+      winnerGain = applyDiminishingReturns(winnerRating, baseGain);
       loserLoss = Math.max(0, Math.round(loserK * expectedWinner));
     } else {
       // Swiss mode: True ELO - both change based on expected outcome
@@ -1223,7 +1262,9 @@
       const loserK = getKFactor(loserRating, loserMatchCount, "swiss", loserSceneCount);
       
       // Calculate changes using their respective K-factors
-      winnerGain = Math.max(0, Math.round(winnerK * (1 - expectedWinner)));
+      const baseGain = Math.max(0, Math.round(winnerK * (1 - expectedWinner)));
+      // Apply diminishing returns - harder to gain points at higher ratings
+      winnerGain = applyDiminishingReturns(winnerRating, baseGain);
       loserLoss = Math.max(0, Math.round(loserK * expectedWinner));
     }
     
@@ -1329,8 +1370,23 @@
     // Change = K * (0.5 - Expected)
     // If Expected > 0.5 (favorite), you lose rating for drawing
     // If Expected < 0.5 (underdog), you gain rating for drawing
-    const leftChange = Math.round(leftK * (0.5 - expectedLeft));
-    const rightChange = Math.round(rightK * (0.5 - expectedRight));
+    let leftChange = Math.round(leftK * (0.5 - expectedLeft));
+    let rightChange = Math.round(rightK * (0.5 - expectedRight));
+    
+    // Ensure there's a minimum effect when there's a significant rating difference
+    // If ratings differ by at least 5 points, ensure at least a 1-point change
+    // This prevents "skip does nothing" when there's a noticeable rating gap
+    const ratingDiff = Math.abs(leftRating - rightRating);
+    if (ratingDiff >= 5 && leftChange === 0 && rightChange === 0) {
+      // Higher rated performer should lose 1 point, lower rated gains 1 point
+      if (leftRating > rightRating) {
+        leftChange = -1;
+        rightChange = 1;
+      } else {
+        leftChange = 1;
+        rightChange = -1;
+      }
+    }
     
     const newLeftRating = Math.min(100, Math.max(1, leftRating + leftChange));
     const newRightRating = Math.min(100, Math.max(1, rightRating + rightChange));
