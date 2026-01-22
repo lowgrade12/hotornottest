@@ -69,11 +69,12 @@ This reflects that performers with extensive filmography have more "evidence" of
   - Better balance between responsiveness and stability
 
 **Diminishing Returns at Higher Ratings:**
-A new feature applies diminishing returns to rating gains as performers approach 100:
-- At rating 50: 100% of calculated gain
-- At rating 75: ~25% of calculated gain
-- At rating 90: ~4% of calculated gain
-- At rating 95: ~1% of calculated gain
+A new feature applies diminishing returns to rating gains as performers approach 100 using the formula `(distance_from_100 / 50)^2`:
+- At rating 50: 100% of calculated gain (multiplier = 1.0)
+- At rating 75: 25% of calculated gain (multiplier = 0.25)
+- At rating 90: 4% of calculated gain (multiplier = 0.04)
+- At rating 95: 1% of calculated gain (multiplier = 0.01)
+- Minimum gain of 1 point is always ensured for ratings below 100
 
 This makes reaching 100 progressively harder, requiring many more wins at higher ratings.
 
