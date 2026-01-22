@@ -61,7 +61,15 @@ Performers with more scenes have more stable ratings (lower K-factor):
 - <10 scenes: Full K-factor (no reduction)
 
 **Statistics Tracking:**
-Tracks wins, losses, streaks, win rates, and match history in the `hotornot_stats` custom field.
+Tracks wins, losses, draws (skips), streaks, win rates, and match history in the `hotornot_stats` custom field.
+
+**Skip as ELO Draw (Swiss Mode):**
+When you skip a comparison in Swiss mode, it's treated as a draw per standard ELO rules:
+- Both performers receive a score of 0.5 (instead of 1 for win, 0 for loss)
+- Higher-rated performer loses points for not defeating the underdog
+- Lower-rated performer gains points for holding their own against the favorite
+- Equally-rated performers experience no rating change
+- Draws reset the current win/loss streak to zero
 
 **Mode-Specific Behavior:**
 - **Swiss**: Full stats and normal rating changes for both participants

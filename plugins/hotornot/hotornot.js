@@ -885,6 +885,7 @@
         total_matches: 0,
         wins: 0,
         losses: 0,
+        draws: 0,
         current_streak: 0,
         best_streak: 0,
         worst_streak: 0,
@@ -900,6 +901,7 @@
           total_matches: stats.total_matches || 0,
           wins: stats.wins || 0,
           losses: stats.losses || 0,
+          draws: stats.draws || 0,
           current_streak: stats.current_streak || 0,
           best_streak: stats.best_streak || 0,
           worst_streak: stats.worst_streak || 0,
@@ -918,6 +920,7 @@
         total_matches: isNaN(matches) ? 0 : matches,
         wins: 0,
         losses: 0,
+        draws: 0,
         current_streak: 0,
         best_streak: 0,
         worst_streak: 0,
@@ -930,6 +933,7 @@
       total_matches: 0,
       wins: 0,
       losses: 0,
+      draws: 0,
       current_streak: 0,
       best_streak: 0,
       worst_streak: 0,
@@ -940,7 +944,7 @@
   /**
    * Update performer stats after a match
    * @param {Object} currentStats - Current stats object from parsePerformerEloData
-   * @param {boolean|null} won - True if performer won, false if lost, null for participation-only (no win/loss tracking, gauntlet mode defenders only)
+   * @param {boolean|null|string} won - True if performer won, false if lost, null for participation-only (no win/loss tracking), "draw" for skipped/drawn matches
    * @returns {Object} Updated stats object
    */
   function updatePerformerStats(currentStats, won) {
@@ -955,7 +959,20 @@
     if (won === null) {
       newStats.wins = currentStats.wins;
       newStats.losses = currentStats.losses;
+      newStats.draws = currentStats.draws || 0;
       newStats.current_streak = currentStats.current_streak;
+      newStats.best_streak = currentStats.best_streak;
+      newStats.worst_streak = currentStats.worst_streak;
+      return newStats;
+    }
+    
+    // Handle draw (skip) - counts as a tie, resets streak
+    if (won === "draw") {
+      newStats.wins = currentStats.wins;
+      newStats.losses = currentStats.losses;
+      newStats.draws = (currentStats.draws || 0) + 1;
+      // A draw resets the current streak to 0 (neither winning nor losing)
+      newStats.current_streak = 0;
       newStats.best_streak = currentStats.best_streak;
       newStats.worst_streak = currentStats.worst_streak;
       return newStats;
@@ -964,6 +981,7 @@
     // Track win/loss
     newStats.wins = won ? currentStats.wins + 1 : currentStats.wins;
     newStats.losses = won ? currentStats.losses : currentStats.losses + 1;
+    newStats.draws = currentStats.draws || 0;
     
     // Calculate current streak
     if (won) {
@@ -1247,6 +1265,104 @@
     }
     
     return { newWinnerRating, newLoserRating, winnerChange, loserChange };
+  }
+  
+  /**
+   * Handle skip as an ELO draw between two items.
+   * In standard ELO, a draw gives both players a score of 0.5 (instead of 1 for win, 0 for loss).
+   * Rating change = K * (0.5 - Expected)
+   * - If higher-rated item draws with lower-rated: higher loses points, lower gains
+   * - If equally-rated items draw: no change
+   * @param {Object} leftItem - Left item in the comparison
+   * @param {Object} rightItem - Right item in the comparison
+   */
+  async function handleSkip(leftItem, rightItem) {
+    if (!leftItem || !rightItem) {
+      console.log("[HotOrNot] Skip: Missing items, no rating update");
+      return;
+    }
+    
+    const leftRating = leftItem.rating100 || 50;
+    const rightRating = rightItem.rating100 || 50;
+    
+    // Fetch fresh performer data to ensure we have current stats
+    let freshLeftItem = leftItem;
+    let freshRightItem = rightItem;
+    
+    if (battleType === "performers") {
+      const [fetchedLeft, fetchedRight] = await Promise.all([
+        fetchPerformerById(leftItem.id),
+        fetchPerformerById(rightItem.id)
+      ]);
+      freshLeftItem = fetchedLeft || leftItem;
+      freshRightItem = fetchedRight || rightItem;
+    }
+    
+    // Parse match counts for K-factor calculation
+    let leftMatchCount = null;
+    let rightMatchCount = null;
+    let leftSceneCount = null;
+    let rightSceneCount = null;
+    
+    if (battleType === "performers" && freshLeftItem) {
+      const leftStats = parsePerformerEloData(freshLeftItem);
+      leftMatchCount = leftStats.total_matches;
+      leftSceneCount = freshLeftItem.scene_count || null;
+    }
+    if (battleType === "performers" && freshRightItem) {
+      const rightStats = parsePerformerEloData(freshRightItem);
+      rightMatchCount = rightStats.total_matches;
+      rightSceneCount = freshRightItem.scene_count || null;
+    }
+    
+    // Calculate expected scores for both items
+    // Rating diff from left's perspective: (rightRating - leftRating)
+    const ratingDiffLeft = rightRating - leftRating;
+    const expectedLeft = 1 / (1 + Math.pow(10, ratingDiffLeft / 40));
+    const expectedRight = 1 - expectedLeft;
+    
+    // Get K-factors for both items
+    const leftK = getKFactor(leftRating, leftMatchCount, currentMode, leftSceneCount);
+    const rightK = getKFactor(rightRating, rightMatchCount, currentMode, rightSceneCount);
+    
+    // Draw gives score of 0.5 to both
+    // Change = K * (0.5 - Expected)
+    // If Expected > 0.5 (favorite), you lose rating for drawing
+    // If Expected < 0.5 (underdog), you gain rating for drawing
+    const leftChange = Math.round(leftK * (0.5 - expectedLeft));
+    const rightChange = Math.round(rightK * (0.5 - expectedRight));
+    
+    const newLeftRating = Math.min(100, Math.max(1, leftRating + leftChange));
+    const newRightRating = Math.min(100, Math.max(1, rightRating + rightChange));
+    
+    console.log(`[HotOrNot] Skip (Draw): Left ${leftRating} -> ${newLeftRating} (${leftChange >= 0 ? '+' : ''}${leftChange}), Right ${rightRating} -> ${newRightRating} (${rightChange >= 0 ? '+' : ''}${rightChange})`);
+    
+    // Update ratings and stats for both items
+    if (battleType === "performers") {
+      // Update left item with draw stats
+      if (leftChange !== 0 || freshLeftItem) {
+        await updateItemRating(leftItem.id, newLeftRating, freshLeftItem, "draw");
+      }
+      // Update right item with draw stats
+      if (rightChange !== 0 || freshRightItem) {
+        await updateItemRating(rightItem.id, newRightRating, freshRightItem, "draw");
+      }
+    } else {
+      // For images, only update if rating changed
+      if (leftChange !== 0) {
+        await updateItemRating(leftItem.id, newLeftRating);
+      }
+      if (rightChange !== 0) {
+        await updateItemRating(rightItem.id, newRightRating);
+      }
+    }
+    
+    return { 
+      leftRating: newLeftRating, 
+      rightRating: newRightRating,
+      leftChange,
+      rightChange
+    };
   }
   
   // Called when gauntlet champion loses - place them one below the winner
@@ -2501,6 +2617,7 @@ async function fetchPerformerCount(performerFilter = {}) {
             <td>${p.total_matches}</td>
             <td class="hon-stats-positive">${p.wins}</td>
             <td class="hon-stats-negative">${p.losses}</td>
+            <td class="hon-stats-neutral">${p.draws || 0}</td>
             <td>${winRate}${winRate !== 'N/A' ? '%' : ''}</td>
             <td>${streakDisplay}</td>
             <td class="hon-stats-positive">${p.best_streak}</td>
@@ -2576,6 +2693,7 @@ async function fetchPerformerCount(performerFilter = {}) {
                     <th scope="col" aria-label="Total matches played">Matches</th>
                     <th scope="col" aria-label="Total wins">Wins</th>
                     <th scope="col" aria-label="Total losses">Losses</th>
+                    <th scope="col" aria-label="Total draws (skips)">Draws</th>
                     <th scope="col" aria-label="Win rate percentage">Win Rate</th>
                     <th scope="col" aria-label="Current win or loss streak">Streak</th>
                     <th scope="col" aria-label="Best winning streak">Best</th>
@@ -3347,7 +3465,7 @@ function addFloatingButton() {
     // Skip button
     const skipBtn = modal.querySelector("#hon-skip-btn");
     if (skipBtn) {
-      skipBtn.addEventListener("click", () => {
+      skipBtn.addEventListener("click", async () => {
         // In gauntlet/champion mode with active run (performers only), skip is disabled
         if (battleType === "performers" && (currentMode === "gauntlet" || currentMode === "champion") && gauntletChampion) {
           return;
@@ -3361,6 +3479,10 @@ function addFloatingButton() {
           gauntletDefeated = [];
           gauntletFalling = false;
           gauntletFallingItem = null;
+        }
+        // Apply ELO draw rating changes for skips in Swiss mode
+        if (currentMode === "swiss" && currentPair.left && currentPair.right) {
+          await handleSkip(currentPair.left, currentPair.right);
         }
         loadNewPair();
       });
@@ -3389,7 +3511,7 @@ function addFloatingButton() {
     });
 
     // Keyboard shortcuts for choosing
-    document.addEventListener("keydown", function keyHandler(e) {
+    document.addEventListener("keydown", async function keyHandler(e) {
       const modal = document.getElementById("hon-modal");
       if (!modal) {
         document.removeEventListener("keydown", keyHandler);
@@ -3412,7 +3534,6 @@ function addFloatingButton() {
           if (battleType === "performers" && (currentMode === "gauntlet" || currentMode === "champion") && gauntletChampion) {
             return;
           }
-          // TODO: Put these skip functionalities into ONE function
           if(disableChoice) return;
           disableChoice = true;
           if (battleType === "performers" && (currentMode === "gauntlet" || currentMode === "champion")) {
@@ -3421,6 +3542,10 @@ function addFloatingButton() {
             gauntletDefeated = [];
             gauntletFalling = false;
             gauntletFallingItem = null;
+          }
+          // Apply ELO draw rating changes for skips in Swiss mode
+          if (currentMode === "swiss" && currentPair.left && currentPair.right) {
+            await handleSkip(currentPair.left, currentPair.right);
           }
           loadNewPair();
         }
