@@ -1047,6 +1047,10 @@
   color: #dc3545;
 }
 
+.hon-stats-neutral {
+  color: #6c757d;
+}
+
 .hon-stats-loading,
 .hon-stats-empty,
 .hon-stats-error {
