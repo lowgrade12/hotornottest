@@ -35,20 +35,21 @@ const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 40));
 
 #### 2. K-Factor
 ```javascript
-// Dynamic K-factor based on match count (USCF/FIDE approach)
-// New performers (0-9 matches): K = 32
-// Moderately established (10-29 matches): K = 24
-// Well-established (30+ matches): K = 16
+// Dynamic K-factor based on match count (reduced from USCF/FIDE approach)
+// New performers (0-9 matches): K = 16 (reduced from 32)
+// Moderately established (10-29 matches): K = 12 (reduced from 24)
+// Well-established (30+ matches): K = 8 (reduced from 16)
 ```
 
 **Analysis:**
 - Dynamic K-factor varies based on match count for accurate rating adjustments
-- Follows the USCF/FIDE approach: higher K for new players, lower for established
+- Uses a reduced version of the USCF/FIDE approach to slow rating changes
+- Makes it harder for performers to jump quickly to extreme ratings
 
 **Standard ELO K-Factor Ranges:**
 - FIDE (Chess): 40 for new players, 20 for experienced, 10 for masters
 - Online games: Often 32-64 for new, 16-32 for experienced
-- HotOrNot uses: 32 for new, 24 for moderate, 16 for established
+- HotOrNot uses: 16 for new, 12 for moderate, 8 for established (reduced to slow rating changes)
 
 **Scene Count Weighting (Performers):**
 Performers with more scenes have more stable ratings (lower K-factor):
@@ -62,10 +63,19 @@ This reflects that performers with extensive filmography have more "evidence" of
 
 **Implications:**
 - Dynamic K-factor on 1-100 scale means:
-  - New performers converge quickly (max ±32 points)
-  - Established ratings remain more stable (max ±16 points)
-  - Prolific performers (100+ scenes) have very stable ratings (max ±8 points)
+  - New performers converge at a moderate pace (max ±16 points)
+  - Established ratings remain more stable (max ±8 points)
+  - Prolific performers (100+ scenes) have very stable ratings (max ±4 points)
   - Better balance between responsiveness and stability
+
+**Diminishing Returns at Higher Ratings:**
+A new feature applies diminishing returns to rating gains as performers approach 100:
+- At rating 50: 100% of calculated gain
+- At rating 75: ~25% of calculated gain
+- At rating 90: ~4% of calculated gain
+- At rating 95: ~1% of calculated gain
+
+This makes reaching 100 progressively harder, requiring many more wins at higher ratings.
 
 #### 3. Rating Change Calculation
 
