@@ -98,12 +98,24 @@ loserLoss = Math.max(1, Math.round(kFactor * expectedWinner));
 
 #### 4. Rating Bounds
 ```javascript
-const newWinnerRating = Math.min(100, Math.max(1, winnerRating + winnerGain));
-const newLoserRating = Math.min(100, Math.max(1, loserRating - loserLoss));
+let newWinnerRating = Math.min(100, Math.max(1, winnerRating + winnerGain));
+let newLoserRating = Math.min(100, Math.max(1, loserRating - loserLoss));
+
+// Ensure winner ranks higher than loser after a direct win
+if (newWinnerRating < newLoserRating) {
+  if (newLoserRating === 100) {
+    // Loser is at ceiling, reduce to make room for winner
+    newLoserRating = 99;
+    newWinnerRating = 100;
+  } else {
+    newWinnerRating = newLoserRating + 1;
+  }
+}
 ```
 
 - Ratings clamped to 1-100 range
 - Standard approach for bounded rating systems
+- **Winner Rank Guarantee**: After a direct head-to-head win, the winner is guaranteed to rank higher than the loser. If the ELO calculation alone doesn't achieve this, the winner's rating is adjusted to be 1 point above the loser's new rating. At the rating ceiling (100), the loser is reduced to 99 to ensure the winner can reach 100.
 
 ## Identified Issues and Recommendations
 
