@@ -3420,10 +3420,37 @@ async function fetchPerformerCount(performerFilter = {}) {
   // MODAL & NAVIGATION
   // ============================================
 
+  /**
+   * Extract performer ID from a single performer page URL.
+   * Returns the performer ID if on /performers/{id} page, null otherwise.
+   * @returns {string|null} Performer ID or null
+   */
+  function getPerformerIdFromUrl() {
+    const path = window.location.pathname;
+    // Match /performers/{id} where id is one or more digits
+    const match = path.match(/^\/performers\/(\d+)\/?$/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Check if we're on a single performer page (/performers/{id})
+   * @returns {boolean} True if on a single performer page
+   */
+  function isOnSinglePerformerPage() {
+    return getPerformerIdFromUrl() !== null;
+  }
+
   function shouldShowButton() {
     const path = window.location.pathname;
-    // Show on /performers or /images pages
-    return (path === '/performers' || path === '/performers/' || path === '/images' || path === '/images/');
+    // Show on /performers or /images listing pages
+    if (path === '/performers' || path === '/performers/' || path === '/images' || path === '/images/') {
+      return true;
+    }
+    // Also show on individual performer pages (/performers/{id})
+    if (isOnSinglePerformerPage()) {
+      return true;
+    }
+    return false;
   }
 
 function addFloatingButton() {
@@ -3458,7 +3485,10 @@ function addFloatingButton() {
     document.body.appendChild(btn);
   }
 
-  function openRankingModal() {
+  async function openRankingModal() {
+    // Check if we're on a single performer page
+    const singlePerformerId = getPerformerIdFromUrl();
+    
     // Detect if we're on performers or images page
     const path = window.location.pathname;
     if (path === '/images' || path === '/images/') {
@@ -3469,16 +3499,24 @@ function addFloatingButton() {
       cachedUrlFilter = null;
     } else {
       battleType = "performers";
-      // Always refresh URL filters when modal opens to capture current state
-      // This ensures we get the latest filters from the URL, including any changes
-      // made since the last location event or page load
-      cachedUrlFilter = getUrlPerformerFilter();
-      
-      // Log cached filter for debugging
-      if (cachedUrlFilter && Object.keys(cachedUrlFilter).length > 0) {
-        console.log('[HotOrNot] Using URL filters for performers:', cachedUrlFilter);
+      // When on a single performer page, use gauntlet mode to battle with that performer
+      if (singlePerformerId) {
+        currentMode = "gauntlet";
+        // No URL filters when on single performer page
+        cachedUrlFilter = null;
+        console.log(`[HotOrNot] On single performer page, auto-launching gauntlet with performer ID: ${singlePerformerId}`);
       } else {
-        console.log('[HotOrNot] No URL filters detected');
+        // Always refresh URL filters when modal opens to capture current state
+        // This ensures we get the latest filters from the URL, including any changes
+        // made since the last location event or page load
+        cachedUrlFilter = getUrlPerformerFilter();
+        
+        // Log cached filter for debugging
+        if (cachedUrlFilter && Object.keys(cachedUrlFilter).length > 0) {
+          console.log('[HotOrNot] Using URL filters for performers:', cachedUrlFilter);
+        } else {
+          console.log('[HotOrNot] No URL filters detected');
+        }
       }
     }
     
@@ -3568,8 +3606,21 @@ function addFloatingButton() {
       });
     }
 
-    // Load initial comparison
-    loadNewPair();
+    // If on a single performer page, fetch the performer and auto-start gauntlet
+    if (singlePerformerId) {
+      const performer = await fetchPerformerById(singlePerformerId);
+      if (performer) {
+        console.log(`[HotOrNot] Fetched performer for gauntlet:`, performer.name);
+        startGauntletWithPerformer(performer);
+      } else {
+        console.error(`[HotOrNot] Could not fetch performer with ID: ${singlePerformerId}`);
+        // Fall back to normal behavior if performer not found
+        loadNewPair();
+      }
+    } else {
+      // Load initial comparison
+      loadNewPair();
+    }
 
     // Close handlers
     modal.querySelector(".hon-modal-backdrop").addEventListener("click", closeRankingModal);
