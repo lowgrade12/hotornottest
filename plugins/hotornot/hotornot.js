@@ -1278,7 +1278,7 @@
       // The winner beat the loser head-to-head, so they should rank higher
       // Set winner's rating to 1 point above loser's new rating
       // If that would exceed 100, also reduce the loser's rating to make room
-      if (newLoserRating >= 100) {
+      if (newLoserRating === 100) {
         // Loser is at ceiling, so reduce loser by 1 to make room for winner
         newLoserRating = 99;
         newWinnerRating = 100;

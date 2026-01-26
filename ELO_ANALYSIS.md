@@ -103,7 +103,7 @@ let newLoserRating = Math.min(100, Math.max(1, loserRating - loserLoss));
 
 // Ensure winner ranks higher than loser after a direct win
 if (newWinnerRating < newLoserRating) {
-  if (newLoserRating >= 100) {
+  if (newLoserRating === 100) {
     // Loser is at ceiling, reduce to make room for winner
     newLoserRating = 99;
     newWinnerRating = 100;
