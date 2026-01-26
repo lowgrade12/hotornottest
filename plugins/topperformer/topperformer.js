@@ -48,6 +48,7 @@
     try {
       // Query scenes for this studio with performer data
       // We use a large per_page to get all scenes, but limit for performance
+      // Include gender field to filter out male performers
       const query = `
         query FindScenesForStudio($scene_filter: SceneFilterType, $filter: FindFilterType) {
           findScenes(scene_filter: $scene_filter, filter: $filter) {
@@ -57,6 +58,7 @@
               performers {
                 id
                 name
+                gender
               }
             }
           }
@@ -84,11 +86,15 @@
         return null;
       }
 
-      // Aggregate performer appearances
+      // Aggregate performer appearances (excluding male performers)
       const performerCounts = new Map(); // Map<performerId, { name: string, count: number }>
 
       for (const scene of scenes) {
         for (const performer of scene.performers) {
+          // Skip male performers (gender is "MALE" in Stash GraphQL)
+          if (performer.gender === "MALE") {
+            continue;
+          }
           const existing = performerCounts.get(performer.id);
           if (existing) {
             existing.count++;
@@ -355,12 +361,57 @@
   // ============================================
 
   /**
-   * Check if we're on a studios page
-   * @returns {boolean} True if on studios page
+   * Check if we're on a page that may have studio cards
+   * This includes the studios page and the main/home page
+   * @returns {boolean} True if on a page that may show studios
    */
-  function isStudiosPage() {
+  function isPageWithPotentialStudios() {
     const path = window.location.pathname;
-    return path === "/studios" || path === "/studios/" || path.startsWith("/studios?");
+    // Studios page
+    if (path === "/studios" || path === "/studios/" || path.startsWith("/studios?")) {
+      return true;
+    }
+    // Main/home page - may show studios
+    if (path === "/" || path === "") {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if studio cards are present on the page
+   * @returns {boolean} True if studio cards are detected
+   */
+  function hasStudioCardsOnPage() {
+    // Various selectors for studio cards in Stash UI
+    // Use querySelector (returns first match) instead of querySelectorAll for efficiency
+    const cardSelectors = [
+      ".studio-card",
+      "[class*='StudioCard']",
+      ".card.studio",
+      ".grid-item.studio"
+    ];
+
+    for (const selector of cardSelectors) {
+      if (document.querySelector(selector)) {
+        return true;
+      }
+    }
+
+    // Check for cards that have studio links using a more specific selector
+    if (document.querySelector(".card a[href*='/studios/']")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if we should process studio cards on this page
+   * @returns {boolean} True if we should process studio cards
+   */
+  function shouldProcessStudios() {
+    return isPageWithPotentialStudios() || hasStudioCardsOnPage();
   }
 
   // ============================================
@@ -376,8 +427,8 @@
   function init() {
     console.log("[TopPerformer] Plugin initialized");
 
-    // Initial processing if on studios page
-    if (isStudiosPage()) {
+    // Initial processing if on a page with potential studios
+    if (shouldProcessStudios()) {
       // Delay to allow Stash UI to render
       setTimeout(() => {
         processStudioCards();
@@ -386,7 +437,8 @@
 
     // Watch for DOM changes (SPA navigation, lazy loading, etc.)
     const observer = new MutationObserver((mutations) => {
-      if (!isStudiosPage()) {
+      // Check if we should process - either on studios/main page OR if studio cards exist
+      if (!shouldProcessStudios()) {
         return;
       }
 
@@ -407,7 +459,7 @@
       PluginApi.Event.addEventListener("stash:location", (e) => {
         console.log("[TopPerformer] Page changed:", e.detail.data.location.pathname);
 
-        if (isStudiosPage()) {
+        if (shouldProcessStudios()) {
           // Delay to allow UI to render
           setTimeout(() => {
             processStudioCards();
