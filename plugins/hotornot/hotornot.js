@@ -3428,8 +3428,9 @@ async function fetchPerformerCount(performerFilter = {}) {
   function getPerformerIdFromUrl() {
     const path = window.location.pathname;
     // Match /performers/{id} where {id} is a numeric performer ID (one or more digits)
-    // Only matches exact paths like /performers/123 or /performers/123/ (not /performers/123/edit)
-    const match = path.match(/^\/performers\/(\d+)\/?$/);
+    // Matches paths like /performers/123, /performers/123/, /performers/123/scenes, etc.
+    // Uses (?:\/|$) to match either a trailing slash or end of string after the ID
+    const match = path.match(/^\/performers\/(\d+)(?:\/|$)/);
     return match ? match[1] : null;
   }
 
