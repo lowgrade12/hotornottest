@@ -1272,12 +1272,19 @@
     let newLoserRating = Math.min(100, Math.max(1, loserRating - loserLoss));
     
     // Ensure the winner moves to at least the same ranking as the loser (or higher)
-    // If the ELO movement alone doesn't achieve this, adjust the winner's rating
-    // to be 1 point higher than the loser's new rating, ensuring they rank above
+    // If the ELO movement alone doesn't achieve this, adjust the ratings to ensure
+    // the winner ranks above the loser after a direct head-to-head victory
     if (newWinnerRating < newLoserRating) {
-      // The winner beat the loser head-to-head, so they should rank at least as high
-      // Set winner's rating to 1 point above loser's new rating (to ensure higher rank)
-      newWinnerRating = Math.min(100, newLoserRating + 1);
+      // The winner beat the loser head-to-head, so they should rank higher
+      // Set winner's rating to 1 point above loser's new rating
+      // If that would exceed 100, also reduce the loser's rating to make room
+      if (newLoserRating >= 100) {
+        // Loser is at ceiling, so reduce loser by 1 to make room for winner
+        newLoserRating = 99;
+        newWinnerRating = 100;
+      } else {
+        newWinnerRating = newLoserRating + 1;
+      }
     }
     
     const winnerChange = newWinnerRating - winnerRating;
