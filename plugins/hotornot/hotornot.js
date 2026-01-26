@@ -3427,7 +3427,8 @@ async function fetchPerformerCount(performerFilter = {}) {
    */
   function getPerformerIdFromUrl() {
     const path = window.location.pathname;
-    // Match /performers/{id} where id is one or more digits
+    // Match /performers/{id} where {id} is a numeric performer ID (one or more digits)
+    // Only matches exact paths like /performers/123 or /performers/123/ (not /performers/123/edit)
     const match = path.match(/^\/performers\/(\d+)\/?$/);
     return match ? match[1] : null;
   }
@@ -3486,9 +3487,6 @@ function addFloatingButton() {
   }
 
   async function openRankingModal() {
-    // Check if we're on a single performer page
-    const singlePerformerId = getPerformerIdFromUrl();
-    
     // Detect if we're on performers or images page
     const path = window.location.pathname;
     if (path === '/images' || path === '/images/') {
@@ -3499,6 +3497,8 @@ function addFloatingButton() {
       cachedUrlFilter = null;
     } else {
       battleType = "performers";
+      // Check if we're on a single performer page (only relevant for performers)
+      const singlePerformerId = getPerformerIdFromUrl();
       // When on a single performer page, use gauntlet mode to battle with that performer
       if (singlePerformerId) {
         currentMode = "gauntlet";
@@ -3519,6 +3519,9 @@ function addFloatingButton() {
         }
       }
     }
+    
+    // Get performer ID again after battleType is set (only check for performers)
+    const singlePerformerId = battleType === "performers" ? getPerformerIdFromUrl() : null;
     
     const existingModal = document.getElementById("hon-modal");
     if (existingModal) existingModal.remove();
@@ -3613,7 +3616,7 @@ function addFloatingButton() {
         console.log(`[HotOrNot] Fetched performer for gauntlet:`, performer.name);
         startGauntletWithPerformer(performer);
       } else {
-        console.error(`[HotOrNot] Could not fetch performer with ID: ${singlePerformerId}`);
+        console.error(`[HotOrNot] Could not fetch performer with ID: ${singlePerformerId}. Performer may have been deleted, access restricted, or ID is invalid.`);
         // Fall back to normal behavior if performer not found
         loadNewPair();
       }
