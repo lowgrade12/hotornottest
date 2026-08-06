@@ -1,12 +1,14 @@
-name: Deploy scrapers to Github Pages
+name: Deploy repository to Github Pages
 
 on:
   push:
-    paths:
+      paths:
+      - 'plugins/**'
       - 'scrapers/**'
+      - '.github/workflows/deploy.yml'
+      - 'build_site.sh'
       - 'build_scrapers.sh'
-      - '.github/workflows/deploy-scrapers.yml'
-    branches:
+      branches:
       - main
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
