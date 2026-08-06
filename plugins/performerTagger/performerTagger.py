@@ -13,6 +13,7 @@ Uses only the Python standard library — no pip dependencies.
 
 import json
 import math
+import pathlib
 import re
 import ssl
 import sys
@@ -28,6 +29,86 @@ import log
 SSL_CONTEXT = ssl.create_default_context()
 SSL_CONTEXT.check_hostname = False
 SSL_CONTEXT.verify_mode = ssl.CERT_NONE
+
+# ---------------------------------------------------------------------------
+# Plugin identity
+# ---------------------------------------------------------------------------
+
+def _resolve_plugin_id() -> str:
+    """Derive this plugin's ID from the YAML manifest name, falling back to a
+    hard-coded default so the module still works without the manifest."""
+    here = pathlib.Path(__file__).parent
+    ymls = sorted(here.glob("*.yml")) + sorted(here.glob("*.yaml"))
+    return ymls[0].stem if ymls else "performerTagger"
+
+
+PLUGIN_ID = _resolve_plugin_id()
+
+
+# ---------------------------------------------------------------------------
+# Plugin management (disable / re-enable other plugins)
+# ---------------------------------------------------------------------------
+
+_PLUGINS_WITH_STATUS_QUERY = """
+query { plugins { id enabled } }
+"""
+
+_SET_PLUGINS_ENABLED = """
+mutation SetPluginsEnabled($enabledMap: BoolMap!) {
+  setPluginsEnabled(enabledMap: $enabledMap)
+}
+"""
+
+
+def _get_plugins_status() -> dict:
+    """Return a map of plugin ID → enabled status."""
+    try:
+        result = stash_graphql(_PLUGINS_WITH_STATUS_QUERY)
+        plugins = (result or {}).get("plugins") or []
+        return {p["id"]: p.get("enabled", True) for p in plugins if p.get("id")}
+    except Exception:
+        return {}
+
+
+def _set_plugins_enabled(enabled_map: dict) -> bool:
+    """Update the enabled state for the given plugins."""
+    try:
+        stash_graphql(_SET_PLUGINS_ENABLED, {"enabledMap": enabled_map})
+        return True
+    except Exception as exc:
+        log.LogError(f"[PerformerTagger] Failed to update plugin enabled state: {exc}")
+        return False
+
+
+def _disable_other_plugins() -> list:
+    """Disable all plugins except this one. Returns the list of plugin IDs that
+    were previously enabled so they can be re-enabled later."""
+    status = _get_plugins_status()
+    to_disable = [pid for pid, enabled in status.items()
+                  if pid != PLUGIN_ID and enabled]
+    if not to_disable:
+        log.LogInfo("[PerformerTagger] No other plugins to disable.")
+        return []
+    enabled_map = {pid: False for pid in to_disable}
+    if _set_plugins_enabled(enabled_map):
+        log.LogInfo(
+            f"[PerformerTagger] Disabled {len(to_disable)} other plugin(s): "
+            + ", ".join(to_disable)
+        )
+    return to_disable
+
+
+def _reenable_plugins(plugin_ids: list) -> None:
+    """Re-enable the given plugins."""
+    if not plugin_ids:
+        return
+    enabled_map = {pid: True for pid in plugin_ids}
+    if _set_plugins_enabled(enabled_map):
+        log.LogInfo(
+            f"[PerformerTagger] Re-enabled {len(plugin_ids)} plugin(s): "
+            + ", ".join(plugin_ids)
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tag groups — mirror the JavaScript DEFAULT_TAG_GROUPS constant exactly
@@ -152,6 +233,21 @@ def stash_graphql(query, variables=None):
     except Exception as exc:
         log.LogError(f"Stash request error: {exc}")
         raise
+
+
+_PLUGIN_CONFIG_QUERY = "query { configuration { plugins } }"
+
+
+def fetch_plugin_settings() -> dict:
+    """Read this plugin's user-configured settings from Stash (Settings → Plugins).
+    Returns the raw settings map or {} on any error."""
+    try:
+        result = stash_graphql(_PLUGIN_CONFIG_QUERY)
+        plugins = ((result or {}).get("configuration") or {}).get("plugins") or {}
+        cfg = plugins.get(PLUGIN_ID)
+        return cfg if isinstance(cfg, dict) else {}
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -917,24 +1013,36 @@ def main():
     mode = args.get("mode", "")
     skip_tagged = bool(args.get("skip_tagged", False))
 
-    if mode == "batch_tag":
-        output = task_batch_tag_performers(skip_tagged=skip_tagged)
-        print(json.dumps({"output": output}))
-        return
+    plugin_cfg = fetch_plugin_settings()
+    disable_plugins = bool(plugin_cfg.get("disablePluginsBeforeRun", False))
 
-    if mode == "batch_tag_from_scenes":
-        output = task_batch_tag_from_scenes(skip_tagged=skip_tagged)
-        print(json.dumps({"output": output}))
-        return
+    batch_modes = ("batch_tag", "batch_tag_from_scenes", "remove_all_tags")
+    previously_enabled = []
+    if disable_plugins and mode in batch_modes:
+        previously_enabled = _disable_other_plugins()
 
-    if mode == "remove_all_tags":
-        output = task_remove_performer_tags()
-        print(json.dumps({"output": output}))
-        return
+    try:
+        if mode == "batch_tag":
+            output = task_batch_tag_performers(skip_tagged=skip_tagged)
+            print(json.dumps({"output": output}))
+            return
 
-    # Unknown mode — emit a helpful error so Stash logs it
-    log.LogError(f"PerformerTagger: unknown task mode '{mode}'")
-    print(json.dumps({"error": f"Unknown mode: {mode}"}))
+        if mode == "batch_tag_from_scenes":
+            output = task_batch_tag_from_scenes(skip_tagged=skip_tagged)
+            print(json.dumps({"output": output}))
+            return
+
+        if mode == "remove_all_tags":
+            output = task_remove_performer_tags()
+            print(json.dumps({"output": output}))
+            return
+
+        # Unknown mode — emit a helpful error so Stash logs it
+        log.LogError(f"PerformerTagger: unknown task mode '{mode}'")
+        print(json.dumps({"error": f"Unknown mode: {mode}"}))
+    finally:
+        if previously_enabled:
+            _reenable_plugins(previously_enabled)
 
 
 if __name__ == "__main__":
