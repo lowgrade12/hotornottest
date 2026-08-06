@@ -1018,10 +1018,10 @@ def main():
 
     batch_modes = ("batch_tag", "batch_tag_from_scenes", "remove_all_tags")
     previously_enabled = []
-    if disable_plugins and mode in batch_modes:
-        previously_enabled = _disable_other_plugins()
-
     try:
+        if disable_plugins and mode in batch_modes:
+            previously_enabled = _disable_other_plugins()
+
         if mode == "batch_tag":
             output = task_batch_tag_performers(skip_tagged=skip_tagged)
             print(json.dumps({"output": output}))
