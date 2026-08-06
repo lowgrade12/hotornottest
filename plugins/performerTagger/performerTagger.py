@@ -67,6 +67,16 @@ DEFAULT_TAG_GROUPS = [
         "tags": ["Innie Pussy", "Outie Pussy"],
         "lenient": True,
     },
+    {
+        "category": "Tattoos",
+        "tags": ["Tattoos", "No Tattoos"],
+        "auto_tag_only": True,
+    },
+    {
+        "category": "Piercings",
+        "tags": ["Piercings", "No Piercings"],
+        "auto_tag_only": True,
+    },
 ]
 
 # All tag names that this plugin manages (lowercase for fast lookup)
@@ -384,6 +394,18 @@ def derive_tags(performer: dict) -> list[dict]:
             if bust_tag:
                 derived.append({"tag_name": bust_tag, "category_name": "Bust Size"})
 
+    # --- Tattoos ---
+    tattoos = performer.get("tattoos")
+    if tattoos is not None:
+        t = str(tattoos).strip()
+        derived.append({"tag_name": "No Tattoos" if t == "" else "Tattoos", "category_name": "Tattoos"})
+
+    # --- Piercings ---
+    piercings = performer.get("piercings")
+    if piercings is not None:
+        p = str(piercings).strip()
+        derived.append({"tag_name": "No Piercings" if p == "" else "Piercings", "category_name": "Piercings"})
+
     return derived
 
 
@@ -448,6 +470,8 @@ def derive_tags_from_scenes(scenes: list[dict], current_tag_name_to_id: dict) ->
     managed_tag_map: dict[str, dict] = {}
     lenient_categories: set[str] = set()
     for group in DEFAULT_TAG_GROUPS:
+        if group.get("auto_tag_only"):
+            continue
         for tag_name in group["tags"]:
             managed_tag_map[tag_name.lower()] = {
                 "tag_name": tag_name,
@@ -459,6 +483,8 @@ def derive_tags_from_scenes(scenes: list[dict], current_tag_name_to_id: dict) ->
     # Determine which categories already have a managed tag on the performer
     filled_categories: set[str] = set()
     for group in DEFAULT_TAG_GROUPS:
+        if group.get("auto_tag_only"):
+            continue
         for tag_name in group["tags"]:
             if tag_name.lower() in current_tag_name_to_id:
                 filled_categories.add(group["category"])
@@ -631,6 +657,8 @@ def fetch_performer_page(page: int) -> dict:
           fake_tits
           measurements
           gender
+          tattoos
+          piercings
           tags { id name }
         }
       }
