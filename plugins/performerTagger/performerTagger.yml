@@ -16,6 +16,10 @@ settings:
     displayName: Start Collapsed
     description: Start the quick-tag panel in a collapsed state. Disabled by default.
     type: BOOLEAN
+  disablePluginsBeforeRun:
+    displayName: Disable other plugins before batch run
+    description: "If on, all other enabled plugins will be disabled before any batch task runs, then re-enabled after. Prevents interference from other plugins during tagging. Default off."
+    type: BOOLEAN
 
 # Server-side Python backend (used for the Batch Tag task)
 exec:
