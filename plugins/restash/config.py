@@ -46,8 +46,8 @@ class Settings:
     wildcard_band_high: float = 95.0
     wildcard_pool_low: float = 0.40
     wildcard_pool_high: float = 0.70
-    favorite_affinity_bonus: float = 0.5
-    favorite_percentile_floor: float = 0.60
+    favorite_affinity_bonus: float = 1.0
+    favorite_percentile_floor: float = 0.75
     ingredient_w_perf: float = 0.45
     ingredient_w_tag: float = 0.35
     ingredient_w_studio: float = 0.10
