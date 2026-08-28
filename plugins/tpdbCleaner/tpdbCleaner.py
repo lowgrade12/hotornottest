@@ -13,21 +13,16 @@ from __future__ import annotations
 
 import json
 import sys
-
-
-# ---------------------------------------------------------------------------
-# Plugin input
-# ---------------------------------------------------------------------------
-
-json_input = json.loads(sys.stdin.read())
-server_connection = json_input.get("server_connection", {})
+import urllib.error
+import urllib.parse
+import urllib.request
 
 
 # ---------------------------------------------------------------------------
 # GraphQL helpers
 # ---------------------------------------------------------------------------
 
-def get_stash_url() -> str:
+def get_stash_url(server_connection: dict) -> str:
     """Build the Stash GraphQL URL from the server_connection block."""
     host = server_connection.get("Host", "localhost")
     if host == "0.0.0.0":
@@ -37,7 +32,7 @@ def get_stash_url() -> str:
     return f"{scheme}://{host}:{port}/graphql"
 
 
-def get_headers() -> dict:
+def get_headers(server_connection: dict) -> dict:
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -53,15 +48,18 @@ def get_headers() -> dict:
     return headers
 
 
-def stash_graphql(query: str, variables: dict | None = None) -> dict:
+def stash_graphql(server_connection: dict, query: str, variables: dict | None = None) -> dict:
     """Execute a GraphQL query/mutation against the local Stash instance."""
-    import urllib.request
-
     payload = json.dumps({"query": query, "variables": variables or {}}).encode()
-    url = get_stash_url()
-    req = urllib.request.Request(url, data=payload, headers=get_headers(), method="POST")
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode())
+    url = get_stash_url(server_connection)
+    req = urllib.request.Request(url, data=payload, headers=get_headers(server_connection), method="POST")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code} from Stash GraphQL endpoint: {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Could not reach Stash GraphQL endpoint ({url}): {exc.reason}") from exc
     if "errors" in result:
         raise RuntimeError(f"GraphQL error: {result['errors']}")
     return result.get("data", {})
@@ -102,13 +100,28 @@ mutation UpdateSceneStashIDs($id: ID!, $stash_ids: [StashIDInput!]) {
 """
 
 
+def _endpoint_host(endpoint: str) -> str:
+    """Return the lowercase hostname from an endpoint URL."""
+    return urllib.parse.urlparse(endpoint).hostname or ""
+
+
+def _is_stashdb(endpoint: str) -> bool:
+    host = _endpoint_host(endpoint)
+    return host == "stashdb.org" or host.endswith(".stashdb.org")
+
+
+def _is_tpdb(endpoint: str) -> bool:
+    host = _endpoint_host(endpoint)
+    return host == "theporndb.net" or host.endswith(".theporndb.net")
+
+
 # ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
 
-def clean_tpdb_ids() -> None:
+def clean_tpdb_ids(server_connection: dict) -> None:
     print("[TPDBCleaner] Fetching scenes with ThePornDB IDs...")
-    data = stash_graphql(FIND_TPDB_SCENES_QUERY)
+    data = stash_graphql(server_connection, FIND_TPDB_SCENES_QUERY)
     scenes = data.get("findScenes", {}).get("scenes", [])
     print(f"[TPDBCleaner] Found {len(scenes)} scene(s) with a ThePornDB ID. Checking for StashDB duplicates...")
 
@@ -118,17 +131,18 @@ def clean_tpdb_ids() -> None:
         scene_id = scene["id"]
         stash_ids = scene.get("stash_ids", [])
 
-        has_stashdb = any("stashdb.org" in sid["endpoint"] for sid in stash_ids)
-        has_tpdb = any("theporndb.net" in sid["endpoint"] for sid in stash_ids)
+        has_stashdb = any(_is_stashdb(sid["endpoint"]) for sid in stash_ids)
+        has_tpdb = any(_is_tpdb(sid["endpoint"]) for sid in stash_ids)
 
         if has_stashdb and has_tpdb:
             # Keep every stash_id that is NOT from ThePornDB
             new_stash_ids = [
                 {"endpoint": sid["endpoint"], "stash_id": sid["stash_id"]}
                 for sid in stash_ids
-                if "theporndb.net" not in sid["endpoint"]
+                if not _is_tpdb(sid["endpoint"])
             ]
             stash_graphql(
+                server_connection,
                 UPDATE_SCENE_STASH_IDS_MUTATION,
                 {"id": scene_id, "stash_ids": new_stash_ids},
             )
@@ -144,7 +158,10 @@ def clean_tpdb_ids() -> None:
 
 def main() -> int:
     try:
-        clean_tpdb_ids()
+        raw = sys.stdin.read()
+        json_input = json.loads(raw) if raw.strip() else {}
+        server_connection = json_input.get("server_connection", {})
+        clean_tpdb_ids(server_connection)
         return 0
     except Exception as exc:
         print(f"[TPDBCleaner] ERROR: {exc}", file=sys.stderr)
