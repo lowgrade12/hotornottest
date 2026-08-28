@@ -1,6 +1,6 @@
 name: TPDB Cleaner
 description: Finds scenes that have both a StashDB and ThePornDB stash ID, then removes the ThePornDB ID, leaving only the StashDB ID.
-version: 1.0.0
+version: 1.1.0
 url: https://github.com/lowgrade12/myplugins
 exec:
   - python
@@ -11,3 +11,7 @@ tasks:
     description: Remove ThePornDB stash IDs from scenes that also have a StashDB stash ID.
     defaultArgs:
       mode: clean
+  - name: Scrape & Clean TPDB IDs
+    description: Trigger StashDB identify on all ThePornDB-tagged scenes, wait for the job to finish, then remove the ThePornDB IDs from any scenes that now have a StashDB match.
+    defaultArgs:
+      mode: scrape_and_clean
