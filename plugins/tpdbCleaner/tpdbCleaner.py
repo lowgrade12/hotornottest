@@ -1,8 +1,15 @@
 """
 tpdbCleaner.py
 
-Stash plugin: finds scenes that have both a StashDB and ThePornDB stash ID,
-then removes the ThePornDB ID, leaving only the StashDB ID.
+Stash plugin with two tasks:
+
+  clean            – finds scenes that have both a StashDB and ThePornDB stash
+                     ID, then removes the ThePornDB ID, leaving only the
+                     StashDB ID.
+
+  scrape_and_clean – finds all scenes with a ThePornDB ID, triggers the
+                     StashDB identify task on them, waits for the background
+                     job to finish, and then runs the same clean-up step above.
 
 Plugin input is read from stdin as JSON (Stash raw interface).
 The server_connection block supplies the host/port/auth so the script works
@@ -13,9 +20,12 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +109,39 @@ mutation UpdateSceneStashIDs($id: ID!, $stash_ids: [StashIDInput!]) {
 }
 """
 
+TRIGGER_IDENTIFY_MUTATION = """
+mutation TriggerIdentify($sceneIds: [ID!]!, $stashdb_url: String!) {
+  metadataIdentify(
+    input: {
+      sceneIDs: $sceneIds
+      sources: [
+        {
+          source: {
+            stash_box_endpoint: $stashdb_url
+          }
+        }
+      ]
+      options: {
+        fieldOptions: [
+          {
+            field: "stash_ids"
+            strategy: MERGE
+          }
+        ]
+      }
+    }
+  )
+}
+"""
+
+CHECK_JOB_QUERY = """
+query CheckJobStatus($jobId: ID!) {
+  findJob(input: { id: $jobId }) {
+    status
+  }
+}
+"""
+
 
 def _endpoint_host(endpoint: str) -> str:
     """Return the lowercase hostname from an endpoint URL."""
@@ -152,6 +195,53 @@ def clean_tpdb_ids(server_connection: dict) -> None:
     print(f"[TPDBCleaner] Done. Updated {updated_count} scene(s).")
 
 
+def _wait_for_job(server_connection: dict, job_id: str) -> str:
+    """Poll Stash until the background job reaches a terminal state."""
+    print(f"[TPDBCleaner] Waiting for identify task (Job ID: {job_id}) to finish...")
+    while True:
+        data = stash_graphql(server_connection, CHECK_JOB_QUERY, {"jobId": job_id})
+        status = data.get("findJob", {}).get("status", "")
+        if status in ("FINISHED", "CANCELLED", "FAILED"):
+            print(f"[TPDBCleaner] Job {job_id} completed with status: {status}")
+            return status
+        time.sleep(5)
+
+
+def scrape_and_clean(server_connection: dict) -> None:
+    """Trigger StashDB identify on all TPDB-tagged scenes, wait, then clean."""
+    print("[TPDBCleaner] Phase 1: Finding scenes with ThePornDB IDs...")
+    data = stash_graphql(server_connection, FIND_TPDB_SCENES_QUERY)
+    scenes = data.get("findScenes", {}).get("scenes", [])
+
+    if not scenes:
+        print("[TPDBCleaner] No TPDB scenes found. Nothing to do!")
+        return
+
+    scene_ids = [scene["id"] for scene in scenes]
+    print(f"[TPDBCleaner] Found {len(scene_ids)} scene(s) tagged with ThePornDB.")
+
+    print("[TPDBCleaner] Phase 2: Triggering StashDB identify task...")
+    result = stash_graphql(
+        server_connection,
+        TRIGGER_IDENTIFY_MUTATION,
+        {"sceneIds": scene_ids, "stashdb_url": STASHDB_ENDPOINT},
+    )
+    job_id = result.get("metadataIdentify")
+    if not job_id:
+        raise RuntimeError("metadataIdentify did not return a job ID.")
+
+    status = _wait_for_job(server_connection, str(job_id))
+    if status == "FAILED":
+        print("[TPDBCleaner] Warning: identify job failed. Proceeding with cleanup anyway.")
+
+    print("[TPDBCleaner] Phase 3: Cleaning up old ThePornDB IDs...")
+    clean_tpdb_ids(server_connection)
+    print(
+        f"[TPDBCleaner] Scrape & clean complete. "
+        f"Processed {len(scene_ids)} scene(s)."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -161,7 +251,12 @@ def main() -> int:
         raw = sys.stdin.read()
         json_input = json.loads(raw) if raw.strip() else {}
         server_connection = json_input.get("server_connection", {})
-        clean_tpdb_ids(server_connection)
+        mode = json_input.get("args", {}).get("mode", "clean")
+
+        if mode == "scrape_and_clean":
+            scrape_and_clean(server_connection)
+        else:
+            clean_tpdb_ids(server_connection)
         return 0
     except Exception as exc:
         print(f"[TPDBCleaner] ERROR: {exc}", file=sys.stderr)
