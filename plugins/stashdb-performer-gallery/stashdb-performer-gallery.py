@@ -14,6 +14,14 @@ request_s = requests.Session()
 stash_boxes = {}
 scrapers = {}
 
+# Endpoints to skip when searching for performer images. These TPDB endpoints
+# scope results to movies/JAV only and break image search - the base TPDB
+# endpoint already covers all images.
+SKIPPED_IMAGE_ENDPOINTS = {
+    "https://theporndb.net/graphql?type=Movie",
+    "https://theporndb.net/graphql?type=JAV",
+}
+
 FRAGMENT_IMAGE = """
     id
     title
@@ -155,6 +163,9 @@ def processPerformer(performer):
     nogallery.touch()
     for sid in performer["stash_ids"]:
         log.debug(sid)
+        if sid["endpoint"] in SKIPPED_IMAGE_ENDPOINTS:
+            log.debug("Skipping image search for endpoint: %s" % (sid["endpoint"],))
+            continue
         processPerformerStashid(sid["endpoint"], sid["stash_id"], performer)
 
 
