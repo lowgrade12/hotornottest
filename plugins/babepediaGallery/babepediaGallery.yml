@@ -1,6 +1,6 @@
 name: Babepedia Gallery
-description: Automatically download performer images scraped from Babepedia (https://www.babepedia.com). Add the [Babepedia Gallery] tag to a performer and it will create a gallery of images scraped from that performer's Babepedia page. Apply the tag [Set Profile Image] to an image to set it as the profile image of that performer. Note you will need to configure the download path and add this as a path under settings > library
-version: 0.1
+description: Automatically download performer images scraped from Babepedia (https://www.babepedia.com). Add the [Stashbox Performer Gallery] tag to a performer and it will create a gallery of images scraped from that performer's Babepedia page. Apply the tag [Set Profile Image] to an image to set it as the profile image of that performer. Note you will need to configure the download path and add this as a path under settings > library
+version: 0.2
 url: https://github.com/lowgrade12/myplugins
 exec:
   - python
@@ -13,12 +13,12 @@ settings:
     type: STRING
   removeTagAfterDownload:
     displayName: Remove tag after galleries downloaded
-    description: When enabled, removes the [Babepedia Gallery] tag from performers after their galleries have been downloaded and linked
+    description: When enabled, removes the [Stashbox Performer Gallery] tag from performers after their galleries have been downloaded and linked
     type: BOOLEAN
 
 hooks:
   - name: modify performer
-    description: Download gallery on performer update if the [Babepedia Gallery] tag is applied
+    description: Download gallery on performer update if the [Stashbox Performer Gallery] tag is applied
     triggeredBy:
       - Performer.Update.Post
   - name: image add
@@ -32,7 +32,7 @@ hooks:
 
 tasks:
   - name: "Process Performers"
-    description: Fetch performer images from Babepedia for performers with the [Babepedia Gallery] tag
+    description: Fetch performer images from Babepedia for performers with the [Stashbox Performer Gallery] tag
     defaultArgs:
       mode: processPerformers
   - name: "relink missing images"
