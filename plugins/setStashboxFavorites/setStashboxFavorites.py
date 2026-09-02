@@ -332,7 +332,8 @@ if hook_context:
         # Add gallery tag to performer when favorited. The tag is left in place (not
         # removed once galleries are downloaded) so the stashdb-performer-gallery
         # plugin keeps picking up this performer and downloads any new images added later.
-        if performer and favorite:
+        # Only do this when the galleryTagEnabled setting is turned on.
+        if performer and favorite and gallery_tag_enabled:
             gallery_tag = get_gallery_tag()
             if gallery_tag:
                 add_tag_to_performer(

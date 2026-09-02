@@ -1,7 +1,7 @@
 name: Set Stashbox Favorites
 # requires: stashUserscriptLibrary7dJx1qP
 description: Set Stashbox favorite performers and studios according to stash favorites
-version: 0.9.0
+version: 0.9.1
 url: https://github.com/lowgrade12/myplugins
 settings:
   tagErrors:
