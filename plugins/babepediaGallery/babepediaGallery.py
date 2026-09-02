@@ -462,12 +462,21 @@ def processPerformer(performer):
         if not filename.exists():
             log.info("Downloading image %s to %s" % (image_url, filename))
             try:
-                r = babepedia_get(image_url)
+                # Babepedia's image hosting (user-uploads/pics) enforces
+                # hotlink protection and rejects requests that don't carry a
+                # Referer pointing back at one of its own pages, returning a
+                # 403 (or occasionally a redirect to a placeholder) instead
+                # of the actual image. Send the performer's profile page as
+                # the Referer to satisfy that check.
+                r = babepedia_get(image_url, headers={"Referer": url})
                 if r.status_code == 200:
                     with open(filename, "wb") as f:
                         f.write(r.content)
                 else:
-                    log.warning(f"Failed to download {image_url}: HTTP {r.status_code}")
+                    snippet = r.text[:200].replace("\n", " ") if r.text else ""
+                    log.warning(
+                        f"Failed to download {image_url}: HTTP {r.status_code} {snippet}"
+                    )
             except requests.RequestException as e:
                 log.warning(f"Failed to download {image_url}: {e}")
         else:
