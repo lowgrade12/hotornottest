@@ -190,11 +190,55 @@ def validate_ids(image_data):
     return validated
 
 
+def get_performer_index(performer_id):
+    """Load the performer-level index.json (endpoint -> gallery id mapping) if present."""
+    performer_index_file = Path(settings["path"]) / performer_id / "index.json"
+    if performer_index_file.exists():
+        try:
+            with open(performer_index_file) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            log.debug(f"Could not load performer index {performer_index_file}: {e}")
+    return None
+
+
+def resync_gallery_ids(image_data, performer_id):
+    """Re-resolve gallery_ids against the performer's current per-endpoint gallery mapping.
+
+    Per-image .json files record the per-endpoint gallery id that existed at download
+    time. If that gallery is later deleted and recreated (see processPerformerStashid's
+    "deleted?" handling), the id stored in the performer-level index.json is updated but
+    the already-written per-image .json files are not - leaving those images permanently
+    unable to link to the (now current) gallery. Resolve the gallery via the recorded
+    "endpoint" (when present) against the live performer index so relinking always
+    targets the current gallery instead of a possibly stale/deleted one.
+    """
+    performer_index = get_performer_index(performer_id)
+    if not performer_index:
+        return image_data
+    galleries = performer_index.get("galleries", {})
+    endpoint = image_data.get("endpoint")
+    current_gallery_id = None
+    if endpoint:
+        current_gallery_id = galleries.get(endpoint)
+    elif len(galleries) == 1:
+        # Older per-image .json files (written before the "endpoint" field was
+        # tracked) can't be matched by endpoint. When the performer only has a
+        # single per-endpoint gallery there's no ambiguity, so still resolve
+        # against the current gallery id rather than trusting a possibly
+        # stale/deleted one embedded in the file.
+        current_gallery_id = next(iter(galleries.values()))
+    if current_gallery_id is not None:
+        image_data["gallery_ids"] = [current_gallery_id]
+    return image_data
+
+
 def processImages(img):
     log.debug("image: %s" % (img,))
     image_data = None
     for file in [x["path"] for x in img["visual_files"]]:
         if settings["path"] in file:
+            performer_id = Path(file).parent.name
             index_file = Path(Path(file).parent) / (Path(file).stem + ".json")
             log.debug(index_file)
             if index_file.exists():
@@ -202,6 +246,7 @@ def processImages(img):
                 with open(index_file) as f:
                     index = json.load(f)
                     index["id"] = img["id"]
+                    index = resync_gallery_ids(index, performer_id)
                     if image_data:
                         image_data["gallery_ids"].extend(index["gallery_ids"])
                     else:
@@ -355,6 +400,7 @@ def processPerformerStashid(endpoint, stashid, p):
                         "performer_ids": [p["id"]],
                         "tag_ids": [tag_stashbox_performer_gallery],
                         "gallery_ids": [index["galleries"][endpoint]],
+                        "endpoint": endpoint,
                     }
                     json.dump(image_data, f)
             filename = Path(settings["path"]) / p["id"] / (img["id"] + ".jpg")
@@ -466,6 +512,7 @@ def processPerformerStashid(endpoint, stashid, p):
                                                 "gallery_ids": [
                                                     index["galleries"][endpoint]
                                                 ],
+                                                "endpoint": endpoint,
                                             }
                                             json.dump(image_data, f)
                                     filename = (
@@ -505,6 +552,7 @@ def processPerformerStashid(endpoint, stashid, p):
                                                     "gallery_ids": [
                                                         index["galleries"][endpoint]
                                                     ],
+                                                    "endpoint": endpoint,
                                                 }
                                                 json.dump(image_data, f)
                                             filename = (
