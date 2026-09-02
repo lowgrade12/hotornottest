@@ -6,6 +6,8 @@ import re
 import time
 import requests
 import json
+import subprocess
+import importlib
 from pathlib import Path
 import base64
 
@@ -28,6 +30,78 @@ BABEPEDIA_SEARCH = "https://www.babepedia.com/ajax-search.php"
 # tripping any rate limiting / anti-scraping protections.
 REQUEST_DELAY = 1.0
 _last_request_time = 0.0
+
+# babepedia.com now sits behind Cloudflare's bot protection, which blocks
+# plain `requests` calls (returning a 403/503 "challenge" page instead of
+# the real page content) even though the request itself "succeeds". When
+# that happens we fall back to `cloudscraper`, which knows how to solve the
+# JS challenge, installing it on demand into a plugin-local folder since it
+# isn't a dependency Stash installs for us.
+_cloudscraper_session = None
+_cloudscraper_unavailable = False
+
+
+def _cloudflare_blocked(resp):
+    """Return True if a response looks like a Cloudflare challenge page."""
+    if resp.status_code not in (403, 503):
+        return False
+    body = resp.text[:4096].lower()
+    return any(
+        marker in body
+        for marker in (
+            "cloudflare",
+            "cf-ray",
+            "cf-chl",
+            "challenge-platform",
+            "just a moment",
+            "attention required",
+        )
+    )
+
+
+def _get_cloudscraper_session():
+    """Lazily create (installing if necessary) a cloudscraper session used
+    to bypass Cloudflare's challenge when plain requests are blocked."""
+    global _cloudscraper_session, _cloudscraper_unavailable
+    if _cloudscraper_session is not None or _cloudscraper_unavailable:
+        return _cloudscraper_session
+
+    deps_folder = Path(__file__).resolve().parent / "automatic_dependencies"
+    if str(deps_folder) not in sys.path:
+        sys.path.insert(0, str(deps_folder))
+
+    try:
+        import cloudscraper
+    except ImportError:
+        log.warning(
+            "[Plugin / Babepedia Gallery] babepedia.com appears to be behind "
+            "Cloudflare, installing 'cloudscraper' to bypass it (one-time setup)"
+        )
+        try:
+            deps_folder.mkdir(exist_ok=True)
+            subprocess.check_call(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--no-input",
+                    f"--target={deps_folder}",
+                    "cloudscraper",
+                ],
+                stdout=subprocess.DEVNULL,
+            )
+            importlib.invalidate_caches()
+            import cloudscraper
+        except Exception as e:
+            log.error(f"Failed to install cloudscraper: {e}")
+            _cloudscraper_unavailable = True
+            return None
+
+    scraper = cloudscraper.create_scraper()
+    scraper.headers.update(dict(request_s.headers))
+    _cloudscraper_session = scraper
+    return _cloudscraper_session
 
 
 def _lock_dir():
@@ -130,13 +204,38 @@ FRAGMENT_IMAGE = """
 
 
 def babepedia_get(url, **kwargs):
-    """GET a babepedia.com URL, throttling requests to be a considerate scraper."""
+    """GET a babepedia.com URL, throttling requests to be a considerate scraper.
+
+    Falls back to `cloudscraper` (which solves Cloudflare's JS challenge) if
+    the plain request comes back blocked, since babepedia.com now sits
+    behind Cloudflare.
+    """
     global _last_request_time
     elapsed = time.monotonic() - _last_request_time
     if elapsed < REQUEST_DELAY:
         time.sleep(REQUEST_DELAY - elapsed)
     resp = request_s.get(url, timeout=30, **kwargs)
     _last_request_time = time.monotonic()
+
+    if _cloudflare_blocked(resp):
+        log.debug(
+            "[Plugin / Babepedia Gallery] Cloudflare challenge detected for "
+            "%s, retrying with cloudscraper" % (url,)
+        )
+        scraper = _get_cloudscraper_session()
+        if scraper:
+            try:
+                cf_resp = scraper.get(url, timeout=30, **kwargs)
+                _last_request_time = time.monotonic()
+                if not _cloudflare_blocked(cf_resp):
+                    return cf_resp
+                log.warning(
+                    "[Plugin / Babepedia Gallery] cloudscraper was also "
+                    "blocked by Cloudflare for %s" % (url,)
+                )
+            except requests.RequestException as e:
+                log.debug(f"cloudscraper request to {url} failed: {e}")
+
     return resp
 
 
