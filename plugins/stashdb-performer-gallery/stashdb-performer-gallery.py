@@ -153,8 +153,15 @@ def processPerformer(performer):
     dir.mkdir(parents=True, exist_ok=True)
     nogallery = dir / ".nogallery"
     nogallery.touch()
+    SKIP_ENDPOINTS = [
+        "https://theporndb.net/graphql",
+        "https://theporndb.net/javsql/graphql",
+    ]
     for sid in performer["stash_ids"]:
         log.debug(sid)
+        if sid["endpoint"] in SKIP_ENDPOINTS:
+            log.info("Skipping endpoint %s for performer %s" % (sid["endpoint"], performer["name"]))
+            continue
         processPerformerStashid(sid["endpoint"], sid["stash_id"], performer)
 
 
