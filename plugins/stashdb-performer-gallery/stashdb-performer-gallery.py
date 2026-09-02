@@ -139,7 +139,19 @@ def validate_ids(image_data):
         valid_gallery_ids = []
         for gallery_id in validated["gallery_ids"]:
             try:
-                gallery = stash.find_gallery(gallery_id, fragment="id folder { id } files { path }")
+                try:
+                    gallery = stash.find_gallery(gallery_id, fragment="id folder { id } files { path }")
+                except Exception as e:
+                    # The extended fragment (folder/files) may not be supported by
+                    # every Stash version. Rather than silently dropping this
+                    # (otherwise valid) gallery association - which would leave
+                    # newly created images completely un-galleried - fall back to
+                    # a plain existence check so the gallery is still linked.
+                    log.debug(
+                        f"Error checking gallery {gallery_id} with extended fragment, "
+                        f"falling back to basic existence check: {e}"
+                    )
+                    gallery = stash.find_gallery(gallery_id)
                 if not gallery:
                     log.debug(f"Gallery {gallery_id} no longer exists, skipping")
                     continue
