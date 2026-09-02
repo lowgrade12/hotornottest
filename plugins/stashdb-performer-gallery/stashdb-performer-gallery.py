@@ -247,6 +247,11 @@ def processImages(img):
                     index = json.load(f)
                     index["id"] = img["id"]
                     index = resync_gallery_ids(index, performer_id)
+                    # "endpoint" is only used above to resolve the correct gallery
+                    # and is not a valid ImageUpdateInput field - Stash's GraphQL
+                    # API rejects the mutation with 422 Unprocessable Entity if it
+                    # is included, so it must not be sent to update_image.
+                    index.pop("endpoint", None)
                     if image_data:
                         image_data["gallery_ids"].extend(index["gallery_ids"])
                     else:
