@@ -30,56 +30,74 @@ REQUEST_DELAY = 1.0
 _last_request_time = 0.0
 
 
-def _lock_path():
+def _lock_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         ".babepedia_gallery_running.lock")
+                         ".babepedia_gallery_running")
+
+
+def _lock_marker_path():
+    return os.path.join(_lock_dir(), str(os.getpid()))
 
 
 def acquire_lock():
-    """Create a lock file indicating that a performer/relink task is actively
-    running, so the Performer.Update.Post hook (fired by our own performer
-    updates) knows to bypass reprocessing instead of looping back into
-    "Process Performers"."""
+    """Create a marker file (named after this process's PID) indicating that
+    a performer/relink task is actively running, so the Performer.Update.Post
+    hook (fired by our own performer updates) knows to bypass reprocessing
+    instead of looping back into "Process Performers".
+
+    Each concurrently running hook invocation gets its own marker file keyed
+    by PID, rather than all sharing a single lock file. Stash fires
+    Image.Create.Post/Image.Update.Post hooks as separate processes for every
+    image touched during a bulk scan, and with a single shared lock file one
+    of those short-lived processes finishing (and deleting the lock) could
+    prematurely clear the lock still held by a longer-running "Process
+    Performers"/"relink missing images" task, re-opening the reprocessing
+    loop the lock is meant to prevent."""
     try:
-        with open(_lock_path(), "w") as fh:
-            fh.write(str(os.getpid()))
+        os.makedirs(_lock_dir(), exist_ok=True)
+        Path(_lock_marker_path()).touch()
     except OSError as e:
-        log.debug(f"Could not create lock file: {e}")
+        log.debug(f"Could not create lock marker: {e}")
 
 
 def release_lock():
-    """Remove the lock file when the task finishes."""
+    """Remove this process's marker file when its task finishes."""
     try:
-        os.unlink(_lock_path())
+        os.unlink(_lock_marker_path())
     except OSError:
         pass
 
 
 def is_task_running():
-    """Return True if the lock file exists and references a still-running
-    process. Stale locks (referencing a dead PID) are cleaned up and treated
-    as not running."""
-    path = _lock_path()
-    if not os.path.exists(path):
-        return False
+    """Return True if any marker file exists that references a still-running
+    process. Stale markers (referencing a dead PID) are cleaned up and
+    ignored."""
+    lock_dir = _lock_dir()
     try:
-        with open(path) as fh:
-            pid_str = fh.read().strip()
-        if pid_str:
-            pid = int(pid_str)
-            os.kill(pid, 0)
-        return True
-    except (ValueError, ProcessLookupError):
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-        return False
-    except PermissionError:
-        # Process exists but we can't signal it (different user) - still running
-        return True
+        entries = os.listdir(lock_dir)
     except OSError:
         return False
+    running = False
+    for entry in entries:
+        try:
+            pid = int(entry)
+        except ValueError:
+            continue
+        marker_path = os.path.join(lock_dir, entry)
+        try:
+            os.kill(pid, 0)
+            running = True
+        except ProcessLookupError:
+            try:
+                os.unlink(marker_path)
+            except OSError:
+                pass
+        except PermissionError:
+            # Process exists but we can't signal it (different user) - still running
+            running = True
+        except OSError:
+            continue
+    return running
 
 
 FRAGMENT_IMAGE = """
@@ -347,7 +365,7 @@ def processImages(img):
 
 
 def processPerformers():
-    """Process all performers with the [Babepedia Gallery] tag.
+    """Process all performers with the [Stashbox Performer Gallery] tag.
 
     Returns:
         list: List of performer IDs that were processed
@@ -357,7 +375,7 @@ def processPerformers():
             "depth": 0,
             "excludes": [],
             "modifier": "INCLUDES_ALL",
-            "value": [tag_babepedia_gallery],
+            "value": [tag_stashbox_performer_gallery],
         }
     }
     performers = stash.find_performers(f=query)
@@ -415,7 +433,7 @@ def processPerformer(performer):
         gallery_input = {
             "title": "%s - Babepedia" % (babepedia_name,),
             "urls": [url],
-            "tag_ids": [tag_babepedia_gallery],
+            "tag_ids": [tag_stashbox_performer_gallery],
             "performer_ids": [performer["id"]],
         }
         gal = stash.create_gallery(gallery_input)
@@ -435,7 +453,7 @@ def processPerformer(performer):
                     "title": "%s - %s" % (babepedia_name, i),
                     "urls": [image_url],
                     "performer_ids": [performer["id"]],
-                    "tag_ids": [tag_babepedia_gallery],
+                    "tag_ids": [tag_stashbox_performer_gallery],
                     "gallery_ids": [index["gallery_id"]],
                 }
                 json.dump(image_data, f)
@@ -474,7 +492,7 @@ def setPerformerPicture(img):
 
 
 def remove_tag_from_performer(performer_id):
-    """Remove the [Babepedia Gallery] tag from a performer after its gallery is downloaded."""
+    """Remove the [Stashbox Performer Gallery] tag from a performer after its gallery is downloaded."""
     try:
         performer = stash.find_performer(performer_id)
         if not performer:
@@ -483,18 +501,18 @@ def remove_tag_from_performer(performer_id):
 
         current_tag_ids = [tag["id"] for tag in performer.get("tags", [])]
 
-        if tag_babepedia_gallery not in current_tag_ids:
+        if tag_stashbox_performer_gallery not in current_tag_ids:
             log.debug(f"Performer {performer.get('name', performer_id)} doesn't have the gallery tag")
             return False
 
-        new_tag_ids = [tid for tid in current_tag_ids if tid != tag_babepedia_gallery]
+        new_tag_ids = [tid for tid in current_tag_ids if tid != tag_stashbox_performer_gallery]
 
         stash.update_performer({
             "id": performer_id,
             "tag_ids": new_tag_ids
         })
 
-        log.info(f"Removed [Babepedia Gallery] tag from performer {performer.get('name', performer_id)}")
+        log.info(f"Removed [Stashbox Performer Gallery] tag from performer {performer.get('name', performer_id)}")
         return True
     except Exception as e:
         log.error(f"Error removing tag from performer {performer_id}: {e}")
@@ -558,7 +576,7 @@ def relink_images(performer_id=None, processed_performer_ids=None):
             for pid in processed_performer_ids:
                 if remove_tag_from_performer(pid):
                     removed_count += 1
-            log.info(f"Removed [Babepedia Gallery] tag from {removed_count} performers")
+            log.info(f"Removed [Stashbox Performer Gallery] tag from {removed_count} performers")
 
 
 json_input = json.loads(sys.stdin.read())
@@ -574,7 +592,9 @@ settings = {
 if "babepediaGallery" in config:
     settings.update(config["babepediaGallery"])
 
-tag_babepedia_gallery = stash.find_tag("[Babepedia Gallery]", create=True).get("id")
+tag_stashbox_performer_gallery = stash.find_tag(
+    "[Stashbox Performer Gallery]", create=True
+).get("id")
 tag_performer_image = stash.find_tag("[Set Profile Image]", create=True).get("id")
 
 if "mode" in json_input["args"]:
@@ -588,7 +608,7 @@ if "mode" in json_input["args"]:
     try:
         if "performer" in json_input["args"]:
             p = stash.find_performer(json_input["args"]["performer"])
-            if tag_babepedia_gallery in [x["id"] for x in p["tags"]]:
+            if tag_stashbox_performer_gallery in [x["id"] for x in p["tags"]]:
                 processPerformer(p)
                 stash.metadata_scan(paths=[settings["path"]])
                 stash.run_plugin_task(

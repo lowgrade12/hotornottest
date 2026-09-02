@@ -1,6 +1,6 @@
 # Babepedia Gallery
 
-Automatically download performer images scraped from [Babepedia](https://www.babepedia.com). Add the `[Babepedia Gallery]` tag to a performer and it will create a gallery of images scraped from that performer's Babepedia page.
+Automatically download performer images scraped from [Babepedia](https://www.babepedia.com). Add the `[Stashbox Performer Gallery]` tag to a performer and it will create a gallery of images scraped from that performer's Babepedia page. This is the same tag used by the [stashdb-performer-gallery](../stashdb-performer-gallery) plugin, so tagging a performer once triggers both plugins.
 
 ## Features
 
@@ -13,18 +13,18 @@ Automatically download performer images scraped from [Babepedia](https://www.bab
 
 1. Configure the download path in plugin settings
 2. Add the configured path as a library path in Stash settings
-3. Tag performers with `[Babepedia Gallery]` to trigger gallery creation
+3. Tag performers with `[Stashbox Performer Gallery]` to trigger gallery creation
 
 ## Settings
 
 | Setting | Description |
 |---------|-------------|
 | **Download parent folder** | Location for downloaded files. Must be a different folder from stash and covered by a library path. |
-| **Remove tag after galleries downloaded** | When enabled, removes the `[Babepedia Gallery]` tag from performers after their galleries have been downloaded and linked. |
+| **Remove tag after galleries downloaded** | When enabled, removes the `[Stashbox Performer Gallery]` tag from performers after their galleries have been downloaded and linked. |
 
 ## Tasks
 
-- **Process Performers**: Fetch performer images from Babepedia for all performers with the `[Babepedia Gallery]` tag
+- **Process Performers**: Fetch performer images from Babepedia for all performers with the `[Stashbox Performer Gallery]` tag
 - **relink missing images**: Reprocess images that are missing gallery associations
 
 ## Hooks
@@ -41,7 +41,7 @@ Automatically download performer images scraped from [Babepedia](https://www.bab
    - Otherwise falls back to Babepedia's `ajax-search.php` endpoint and picks the best name match
 2. The performer's Babepedia page is fetched and parsed for full-size image URLs from the main profile gallery and any user-submitted uploads.
 3. Images are downloaded to `<download path>/<performer id>/` alongside a small `.json` index file per image (used to link tags/gallery/performer once Stash discovers the file via a library scan).
-4. A gallery tagged `[Babepedia Gallery]` and linked to the performer is created (or reused if one already exists) to hold the downloaded images.
+4. A gallery tagged `[Stashbox Performer Gallery]` and linked to the performer is created (or reused if one already exists) to hold the downloaded images.
 
 ## Notes
 
