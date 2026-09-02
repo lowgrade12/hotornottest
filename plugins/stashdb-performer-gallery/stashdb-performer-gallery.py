@@ -22,6 +22,58 @@ SKIPPED_IMAGE_ENDPOINTS = {
     "https://theporndb.net/graphql?type=JAV",
 }
 
+
+def _lock_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         ".stashdb_performer_gallery_running.lock")
+
+
+def acquire_lock():
+    """Create a lock file indicating that a performer/relink task is actively
+    running, so the Performer.Update.Post hook (fired by our own performer
+    updates) knows to bypass reprocessing instead of looping back into
+    "Process Performers"."""
+    try:
+        with open(_lock_path(), "w") as fh:
+            fh.write(str(os.getpid()))
+    except OSError as e:
+        log.debug(f"Could not create lock file: {e}")
+
+
+def release_lock():
+    """Remove the lock file when the task finishes."""
+    try:
+        os.unlink(_lock_path())
+    except OSError:
+        pass
+
+
+def is_task_running():
+    """Return True if the lock file exists and references a still-running
+    process. Stale locks (referencing a dead PID) are cleaned up and treated
+    as not running."""
+    path = _lock_path()
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path) as fh:
+            pid_str = fh.read().strip()
+        if pid_str:
+            pid = int(pid_str)
+            os.kill(pid, 0)
+        return True
+    except (ValueError, ProcessLookupError):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        return False
+    except PermissionError:
+        # Process exists but we can't signal it (different user) - still running
+        return True
+    except OSError:
+        return False
+
 FRAGMENT_IMAGE = """
     id
     title
@@ -661,44 +713,77 @@ tag_performer_image = stash.find_tag("[Set Profile Image]", create=True).get("id
 
 if "mode" in json_input["args"]:
     PLUGIN_ARGS = json_input["args"]["mode"]
-    if "performer" in json_input["args"]:
-        p = stash.find_performer(json_input["args"]["performer"])
-        if tag_stashbox_performer_gallery in [x["id"] for x in p["tags"]]:
-            processPerformer(p)
-            stash.metadata_scan(paths=[settings["path"]])
+    # These tasks touch performers/images ourselves (downloading images,
+    # scanning metadata, linking galleries, setting profile pictures), which
+    # would otherwise re-trigger the Performer.Update.Post hook and process
+    # the same performer again. Hold the lock for the duration of the task so
+    # the hook knows to bypass reprocessing while we're already working.
+    acquire_lock()
+    try:
+        if "performer" in json_input["args"]:
+            p = stash.find_performer(json_input["args"]["performer"])
+            if tag_stashbox_performer_gallery in [x["id"] for x in p["tags"]]:
+                processPerformer(p)
+                stash.metadata_scan(paths=[settings["path"]])
+                stash.run_plugin_task(
+                    "stashdb-performer-gallery",
+                    "relink missing images",
+                    args={"mode": "processImages", "performer_id": p["id"]},
+                )
+        elif "processPerformers" in PLUGIN_ARGS:
+            processed_ids = processPerformers()
+            stash.metadata_scan([settings["path"]])
             stash.run_plugin_task(
-                "stashdb-performer-gallery",
-                "relink missing images",
-                args={"mode": "processImages", "performer_id": p["id"]},
+                "stashdb-performer-gallery", "relink missing images", args={"mode": "processImages", "processed_performer_ids": ",".join(str(pid) for pid in processed_ids)}
             )
-    elif "processPerformers" in PLUGIN_ARGS:
-        processed_ids = processPerformers()
-        stash.metadata_scan([settings["path"]])
-        stash.run_plugin_task(
-            "stashdb-performer-gallery", "relink missing images", args={"mode": "processImages", "processed_performer_ids": ",".join(str(pid) for pid in processed_ids)}
-        )
-    elif "processImages" in PLUGIN_ARGS:
-        if "performer_id" in json_input["args"]:
-            relink_images(performer_id=json_input["args"]["performer_id"])
-        elif "processed_performer_ids" in json_input["args"]:
-            # Batch mode - parse comma-separated performer IDs
-            ids_str = json_input["args"]["processed_performer_ids"]
-            processed_ids = [pid.strip() for pid in ids_str.split(",") if pid.strip()]
-            relink_images(processed_performer_ids=processed_ids)
-        else:
-            relink_images()
+        elif "processImages" in PLUGIN_ARGS:
+            if "performer_id" in json_input["args"]:
+                relink_images(performer_id=json_input["args"]["performer_id"])
+            elif "processed_performer_ids" in json_input["args"]:
+                # Batch mode - parse comma-separated performer IDs
+                ids_str = json_input["args"]["processed_performer_ids"]
+                processed_ids = [pid.strip() for pid in ids_str.split(",") if pid.strip()]
+                relink_images(processed_performer_ids=processed_ids)
+            else:
+                relink_images()
+    finally:
+        release_lock()
 
 
 elif "hookContext" in json_input["args"]:
     id = json_input["args"]["hookContext"]["id"]
     if json_input["args"]["hookContext"]["type"] == "Image.Create.Post":
-        img = stash.find_image(image_in=id, fragment=FRAGMENT_IMAGE)
-        processImages(img)
+        # Hold the lock while handling this hook - processImages() links the
+        # image to its gallery, which would otherwise trigger the
+        # Performer.Update.Post hook indirectly and cause a reprocessing loop.
+        acquire_lock()
+        try:
+            img = stash.find_image(image_in=id, fragment=FRAGMENT_IMAGE)
+            processImages(img)
+        finally:
+            release_lock()
     if json_input["args"]["hookContext"]["type"] == "Image.Update.Post":
         img = stash.find_image(image_in=id, fragment=FRAGMENT_IMAGE)
         if tag_performer_image in [x["id"] for x in img["tags"]]:
-            setPerformerPicture(img)
+            # setPerformerPicture() updates the performer, which fires
+            # Performer.Update.Post - hold the lock so that hook bypasses
+            # reprocessing instead of looping back here.
+            acquire_lock()
+            try:
+                setPerformerPicture(img)
+            finally:
+                release_lock()
     if json_input["args"]["hookContext"]["type"] == "Performer.Update.Post":
-        stash.run_plugin_task(
-            "stashdb-performer-gallery", "Process Performers", args={"mode": "processPerformers", "performer": id}
-        )
+        # Bypass reprocessing if one of our own tasks (which updates
+        # performers/images as part of downloading and linking galleries) is
+        # already running - otherwise that update re-fires this hook and
+        # reprocesses the same performer in an endless loop.
+        if is_task_running():
+            log.debug(
+                "Performer.Update.Post: a stashdb-performer-gallery task is already "
+                "running, bypassing hook to avoid reprocessing loop."
+            )
+        else:
+            stash.run_plugin_task(
+                "stashdb-performer-gallery", "Process Performers", args={"mode": "processPerformers", "performer": id}
+            )
