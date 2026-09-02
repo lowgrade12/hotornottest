@@ -8,7 +8,6 @@ import json
 import log
 import sys
 import ssl
-import os
 import urllib.request
 import urllib.error
 from favorite_performers_sync import (
@@ -150,50 +149,6 @@ def get_plugin_settings():
     if not result:
         return {}
     return result.get('configuration', {}).get('plugins', {}).get('setStashboxFavorites', {})
-
-
-def get_gallery_plugin_settings():
-    """Get settings from the stashdb-performer-gallery plugin configuration.
-    
-    Results are cached to avoid repeated GraphQL queries.
-    """
-    # Use a simple cache to avoid repeated queries
-    if not hasattr(get_gallery_plugin_settings, '_cache'):
-        result = stash_graphql("""query Configuration { configuration { plugins } }""")
-        if not result:
-            get_gallery_plugin_settings._cache = {}
-        else:
-            get_gallery_plugin_settings._cache = result.get('configuration', {}).get('plugins', {}).get('stashdb-performer-gallery', {})
-    return get_gallery_plugin_settings._cache
-
-
-def performer_galleries_already_downloaded(performer_id):
-    """Check if galleries have already been downloaded for a performer.
-    
-    This prevents the tag from being re-added after the stashdb-performer-gallery
-    plugin has removed it (when removeTagAfterDownload is enabled).
-    
-    Args:
-        performer_id: The performer's local Stash ID
-        
-    Returns:
-        True if galleries have been downloaded (index.json exists), False otherwise
-    """
-    gallery_settings = get_gallery_plugin_settings()
-    gallery_path = gallery_settings.get('path', '')
-    
-    if not gallery_path:
-        log.warning(f"No gallery path configured in stashdb-performer-gallery plugin - cannot check for downloaded galleries")
-        return False
-    
-    # Check if the performer's gallery index file exists
-    index_file = os.path.join(gallery_path, str(performer_id), "index.json")
-    
-    if os.path.exists(index_file):
-        log.debug(f"Performer {performer_id} already has downloaded galleries (index.json exists)")
-        return True
-    
-    return False
 
 
 def get_or_create_tag(tag_name):
@@ -374,23 +329,19 @@ if hook_context:
         performer = get_performer(entity_id)
         favorite = performer.get('favorite', False) if performer else False
         
-        # Add gallery tag to performer when favorited, but only if galleries haven't been downloaded yet.
-        # This prevents the tag from being re-added after stashdb-performer-gallery removes it
-        # (when removeTagAfterDownload is enabled).
+        # Add gallery tag to performer when favorited. The tag is left in place (not
+        # removed once galleries are downloaded) so the stashdb-performer-gallery
+        # plugin keeps picking up this performer and downloads any new images added later.
         if performer and favorite:
-            # Check if galleries have already been downloaded for this performer
-            if performer_galleries_already_downloaded(performer['id']):
-                log.debug(f"Skipping gallery tag for performer {performer.get('name', 'Unknown')} - galleries already downloaded")
-            else:
-                gallery_tag = get_gallery_tag()
-                if gallery_tag:
-                    add_tag_to_performer(
-                        performer['id'],
-                        performer.get('name', 'Unknown'),
-                        performer.get('tags', []),
-                        gallery_tag['id'],
-                        gallery_tag.get('name', GALLERY_TAG_NAME)
-                    )
+            gallery_tag = get_gallery_tag()
+            if gallery_tag:
+                add_tag_to_performer(
+                    performer['id'],
+                    performer.get('name', 'Unknown'),
+                    performer.get('tags', []),
+                    gallery_tag['id'],
+                    gallery_tag.get('name', GALLERY_TAG_NAME)
+                )
         
         if performer and performer.get('stash_ids'):
             stashboxes = get_stashboxes()
