@@ -79,19 +79,35 @@ def validate_ids(image_data):
                 log.debug(f"Error checking tag {tag_id}: {e}")
         validated["tag_ids"] = valid_tag_ids
 
-    # Validate gallery_ids - filter out galleries that no longer exist
+    # Validate gallery_ids - filter out galleries that no longer exist and
+    # zip-based galleries whose image membership is managed automatically by
+    # Stash (attempting to set these via imageUpdate always fails with
+    # "cannot change contents of zip-based gallery")
     if "gallery_ids" in validated and validated["gallery_ids"]:
         valid_gallery_ids = []
         for gallery_id in validated["gallery_ids"]:
             try:
-                gallery = stash.find_gallery(gallery_id)
-                if gallery:
-                    valid_gallery_ids.append(gallery_id)
-                else:
+                gallery = stash.find_gallery(gallery_id, fragment="id folder { id } files { path }")
+                if not gallery:
                     log.debug(f"Gallery {gallery_id} no longer exists, skipping")
+                    continue
+                if not gallery.get("folder") and gallery.get("files"):
+                    log.debug(
+                        f"Gallery {gallery_id} is zip/file-based, its image membership "
+                        "is managed automatically by Stash, skipping explicit link"
+                    )
+                    continue
+                valid_gallery_ids.append(gallery_id)
             except Exception as e:
                 log.debug(f"Error checking gallery {gallery_id}: {e}")
-        validated["gallery_ids"] = valid_gallery_ids
+        if valid_gallery_ids:
+            validated["gallery_ids"] = valid_gallery_ids
+        else:
+            # Don't send an empty gallery_ids list - Stash treats an explicit
+            # empty list as "remove from all galleries" which would also be
+            # rejected (or worse, unlink) for zip-based galleries. Simply omit
+            # the field so the image's existing gallery association is untouched.
+            validated.pop("gallery_ids", None)
 
     # Validate performer_ids - filter out performers that no longer exist
     if "performer_ids" in validated and validated["performer_ids"]:
